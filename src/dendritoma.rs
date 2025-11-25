@@ -64,15 +64,15 @@ pub struct Dendritoma {
 
     /// Taxa de decaimento das etiquetas sinápticas (ex: 0.01 = 1% por passo)
     /// Tags são temporárias: se não reforçadas, decaem naturalmente
-    tag_decay_rate: f64,
+    pub tag_decay_rate: f64,
 
     /// Limiar de captura: só consolida se tag > threshold
     /// Valores típicos: 0.2 (moderado) a 0.5 (rigoroso)
-    capture_threshold: f64,
+    pub capture_threshold: f64,
 
     /// Sensibilidade à dopamina/reward para amplificação de tags
     /// Valores típicos: 5.0 (eventos emocionais geram tags 5x mais fortes)
-    dopamine_sensitivity: f64,
+    pub dopamine_sensitivity: f64,
 }
 
 impl Dendritoma {

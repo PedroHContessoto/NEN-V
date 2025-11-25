@@ -63,7 +63,7 @@ pub struct Network {
     pub alert_level: f64,
 
     /// Taxa de decaimento do alert_level (retorna gradualmente ao baseline)
-    alert_decay_rate: f64,
+    pub alert_decay_rate: f64,
 
     /// Novidade média atual da rede (calculada no último update)
     current_avg_novelty: f64,
@@ -82,7 +82,7 @@ pub struct Network {
     spike_buffer: Vec<(i64, usize, SpikeOrigin)>,
 
     /// Janela temporal máxima para STDP (em passos de tempo)
-    stdp_window: i64,
+    pub stdp_window: i64,
 
     /// Estado atual da rede (Vigília ou Sono)
     pub state: NetworkState,

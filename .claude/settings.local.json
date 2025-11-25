@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo test:*)",
+      "Bash(targetreleaseexperiment_a_fr_control.exe)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -31,6 +31,7 @@
 //! net.update(&inputs);
 //! ```
 
+pub mod autoconfig;
 pub mod dendritoma;
 pub mod glia;
 pub mod nenv;

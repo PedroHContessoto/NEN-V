@@ -102,6 +102,15 @@ pub struct NENV {
     /// Último passo em que homeostase foi aplicada
     last_homeo_update: i64,
 
+    /// Proporção do esforço homeostático em ajuste de pesos (0.0-1.0)
+    /// Default: 0.7 (70% em pesos, 30% em threshold)
+    pub homeo_weight_ratio: f64,
+
+    /// Proporção do esforço homeostático em ajuste de threshold (0.0-1.0)
+    /// Default: 0.3 (30% threshold, 70% pesos)
+    /// Nota: weight_ratio + threshold_ratio devem somar 1.0
+    pub homeo_threshold_ratio: f64,
+
     // Parâmetros de metaplasticidade BCM
     /// Limiar metaplástico dinâmico (θ_M na teoria BCM)
     /// Ajusta-se baseado na atividade quadrática média
@@ -142,12 +151,14 @@ impl NENV {
             memory_alpha: 0.02,
             recent_firing_rate: 0.0,
             saved_awake_activity: 0.0,
-            target_firing_rate: 0.15,  // OTIMIZADO: alinhado com iSTDP target
+            target_firing_rate: 0.15,  // Será sobrescrito pelo AutoConfig
             // OTIMIZADO: Homeostase AGRESSIVA - valor encontrado por busca adaptativa
             // Permite FR=0.180 com Consolidação 100% e STDP Ratio 7.78
             homeo_eta: 0.05,      // Valor ótimo: resgata neurônios silenciosos rapidamente
             homeo_interval: 10,    // Frequente o suficiente para manter equilíbrio
             last_homeo_update: -1,
+            homeo_weight_ratio: 0.7,     // 70% peso, 30% threshold (padrão)
+            homeo_threshold_ratio: 0.3,  // 30% threshold, 70% peso
             meta_threshold: 0.12,  // OTIMIZADO: BCM threshold
             meta_alpha: 0.005,     // OTIMIZADO: BCM learning rate
         }
@@ -378,9 +389,9 @@ impl NENV {
 
     /// Aplica plasticidade homeostática periodicamente
     ///
-    /// Implementa synaptic scaling combinado com modulação energética:
-    /// ajusta pesos para manter firing rate próximo ao alvo, considerando
-    /// também o estado energético do neurônio.
+    /// Implementa DOIS mecanismos biológicos simultâneos:
+    /// 1. Synaptic Scaling (Peso): Ajusta "volume" das entradas
+    /// 2. Intrinsic Plasticity (Threshold): Ajusta "sensibilidade" do neurônio
     ///
     /// # Argumentos
     /// * `current_time` - Passo de tempo atual
@@ -392,12 +403,13 @@ impl NENV {
         }
         self.last_homeo_update = current_time;
 
-        // CORREÇÃO: Não aplica homeostase se não há input (evita interferir com weight decay)
-        if !has_external_input {
+        // 🔥 CORREÇÃO: Permite homeostase mesmo sem input externo se FR for 0
+        // (Neurônios "mortos" precisam baixar threshold para procurar sinal)
+        if !has_external_input && self.recent_firing_rate > 0.01 {
             return;
         }
 
-        // Calcula erro de firing rate
+        // Calcula erro de firing rate (positivo = hiperativo, negativo = hipoativo)
         let rate_error = self.recent_firing_rate - self.target_firing_rate;
 
         // Só aplica se erro for significativo (> 1%)
@@ -405,13 +417,27 @@ impl NENV {
             return;
         }
 
-        // Modula erro pela energia: se energia está baixa, não tenta corrigir agressivamente
+        // Modula erro pela energia
         let energy = self.glia.energy_fraction();
         let energy_weight = if energy < 0.3 { 0.3 } else { energy };
         let effective_error = rate_error * energy_weight;
 
-        // Aplica synaptic scaling
-        self.dendritoma.apply_synaptic_scaling(effective_error, self.homeo_eta);
+        // MECANISMO 1: Synaptic Scaling (proporção configurável do esforço homeostático)
+        // Ajusta os pesos para tentar compensar o erro
+        self.dendritoma.apply_synaptic_scaling(effective_error, self.homeo_eta * self.homeo_weight_ratio);
+
+        // ✨ MECANISMO 2: Intrinsic Plasticity (proporção configurável do esforço homeostático) ✨
+        // Ajusta o threshold.
+        // Se rate_error < 0 (hipoativo) → threshold DEVE CAIR (ficar mais sensível)
+        // Se rate_error > 0 (hiperativo) → threshold DEVE SUBIR (ficar menos sensível)
+        let threshold_delta = effective_error * self.homeo_eta * self.homeo_threshold_ratio;
+
+        self.threshold += threshold_delta;
+
+        // 🔥 LIBERAÇÃO DO "GRAMPO DO ASSASSINO":
+        // Clamp inferior de 0.3 → 0.01 (permite hipersensibilidade quando necessário)
+        // Clamp superior em 5.0 previne valores absurdos
+        self.threshold = self.threshold.clamp(0.01, 5.0);
     }
 
     /// Processa um passo completo de atualização do neurónio
@@ -577,7 +603,7 @@ mod tests {
 
         let inputs = vec![1.0, 1.0];
         let potential = neuron.get_modulated_potential(&inputs);
-        neuron.decide_to_fire(potential, 0);
+        neuron.decide_to_fire(potential, 0, false);
 
         assert!(neuron.is_firing);
         assert_eq!(neuron.output_signal, -1.0);
@@ -594,17 +620,17 @@ mod tests {
 
         // Primeiro disparo no tempo 0
         let potential = neuron.get_modulated_potential(&inputs);
-        neuron.decide_to_fire(potential, 0);
+        neuron.decide_to_fire(potential, 0, false);
         assert!(neuron.is_firing);
 
         // Tentativa de disparo no tempo 2 (dentro do período refratário)
         let potential = neuron.get_modulated_potential(&inputs);
-        neuron.decide_to_fire(potential, 2);
+        neuron.decide_to_fire(potential, 2, false);
         assert!(!neuron.is_firing);
 
         // Tentativa de disparo no tempo 6 (fora do período refratário)
         let potential = neuron.get_modulated_potential(&inputs);
-        neuron.decide_to_fire(potential, 6);
+        neuron.decide_to_fire(potential, 6, false);
         assert!(neuron.is_firing);
     }
 
@@ -636,7 +662,7 @@ mod tests {
         let inputs = vec![1.0, 1.0];
         let potential = neuron.get_modulated_potential(&inputs);
 
-        neuron.decide_to_fire(potential, 0);
+        neuron.decide_to_fire(potential, 0, false);
         assert!(!neuron.is_firing);
     }
 
@@ -652,7 +678,7 @@ mod tests {
         // Potencial integrado é alto, mas modulação reduz a zero
         assert_relative_eq!(potential, 0.0, epsilon = 1e-10);
 
-        neuron.decide_to_fire(potential, 0);
+        neuron.decide_to_fire(potential, 0, false);
         assert!(!neuron.is_firing);
     }
 
@@ -764,13 +790,13 @@ mod tests {
 
         // Sem priority alto, não dispara
         let potential = neuron.get_modulated_potential(&inputs);
-        neuron.decide_to_fire(potential, 0);
+        neuron.decide_to_fire(potential, 0, false);
         assert!(!neuron.is_firing);
 
         // Com priority alto, dispara
         neuron.glia.priority = 2.0;
         let potential_boosted = neuron.get_modulated_potential(&inputs);
-        neuron.decide_to_fire(potential_boosted, 1);
+        neuron.decide_to_fire(potential_boosted, 1, false);
         assert!(neuron.is_firing);
     }
 
@@ -794,7 +820,7 @@ mod tests {
 
         // Dispara no tempo 100
         let potential = neuron.get_modulated_potential(&inputs);
-        neuron.decide_to_fire(potential, 100);
+        neuron.decide_to_fire(potential, 100, false);
 
         assert!(neuron.is_firing);
         assert_eq!(neuron.get_last_spike_time(), Some(100));
@@ -813,13 +839,13 @@ mod tests {
 
         // Dispara no tempo 10
         let potential = neuron.get_modulated_potential(&inputs);
-        neuron.decide_to_fire(potential, 10);
+        neuron.decide_to_fire(potential, 10, false);
         assert_eq!(neuron.spike_history().len(), 1);
         assert_eq!(neuron.spike_history()[0], 10);
 
         // Dispara no tempo 20
         let potential = neuron.get_modulated_potential(&inputs);
-        neuron.decide_to_fire(potential, 20);
+        neuron.decide_to_fire(potential, 20, false);
         assert_eq!(neuron.spike_history().len(), 2);
         assert_eq!(neuron.spike_history()[1], 20);
     }
@@ -836,7 +862,7 @@ mod tests {
         // Dispara 15 vezes
         for t in 0..15 {
             let potential = neuron.get_modulated_potential(&inputs);
-            neuron.decide_to_fire(potential, t * 10);
+            neuron.decide_to_fire(potential, t * 10, false);
         }
 
         // Deve manter apenas os últimos 10 spikes
@@ -859,7 +885,7 @@ mod tests {
         // Tenta disparar mas não consegue
         for t in 0..5 {
             let potential = neuron.get_modulated_potential(&inputs);
-            neuron.decide_to_fire(potential, t * 10);
+            neuron.decide_to_fire(potential, t * 10, false);
         }
 
         // Histórico deve permanecer vazio
@@ -877,17 +903,17 @@ mod tests {
 
         // Dispara no tempo 0
         let potential = neuron.get_modulated_potential(&inputs);
-        neuron.decide_to_fire(potential, 0);
+        neuron.decide_to_fire(potential, 0, false);
         assert_eq!(neuron.spike_history().len(), 1);
 
         // Tenta disparar no tempo 2 (dentro do período refratário)
         let potential = neuron.get_modulated_potential(&inputs);
-        neuron.decide_to_fire(potential, 2);
+        neuron.decide_to_fire(potential, 2, false);
         assert_eq!(neuron.spike_history().len(), 1); // Não deve adicionar
 
         // Dispara no tempo 6 (fora do período refratário)
         let potential = neuron.get_modulated_potential(&inputs);
-        neuron.decide_to_fire(potential, 6);
+        neuron.decide_to_fire(potential, 6, false);
         assert_eq!(neuron.spike_history().len(), 2); // Deve adicionar
         assert_eq!(neuron.spike_history()[1], 6);
     }
