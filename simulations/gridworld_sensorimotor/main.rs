@@ -1,15 +1,14 @@
-mod dendritoma;
-mod glia;
-mod nenv;
-mod network;
+// Módulos locais da simulação
 mod environment;
 mod visuals;
 
-use macroquad::prelude::*;
-use network::{ConnectivityType, LearningMode, Network};
-use ::rand::Rng;
+// Importa a biblioteca core NEN-V
+use nenv_visual_sim::network::{ConnectivityType, LearningMode, Network};
 
-// Importa nossos módulos novos
+use macroquad::prelude::*;
+use ::rand::Rng;  // Usa rand global, não o da macroquad
+
+// Importa módulos da simulação
 use environment::{Environment, ActionResult, Metrics};
 use visuals::{compute_neuron_positions, draw_grid_environment, draw_neural_network, draw_metrics, draw_legend_panel};
 

@@ -2,6 +2,18 @@
 name = "nenv_visual_sim"
 version = "0.1.0"
 edition = "2021"
+authors = ["Pedro H. Contessoto"]
+description = "Biologically-inspired neural network with STDP, homeostasis, and sleep-based memory consolidation"
+license = "MIT"
+
+[lib]
+name = "nenv_visual_sim"
+path = "src/lib.rs"
+
+# Simulação GridWorld com aprendizado sensorimotor
+[[bin]]
+name = "gridworld_sensorimotor"
+path = "simulations/gridworld_sensorimotor/main.rs"
 
 [dependencies]
 macroquad = "0.4"

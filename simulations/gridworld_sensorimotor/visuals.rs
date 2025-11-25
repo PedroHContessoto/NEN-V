@@ -1,6 +1,6 @@
 use macroquad::prelude::*;
-use crate::network::{Network, NetworkState};
-use crate::nenv::NeuronType;
+use nenv_visual_sim::network::{Network, NetworkState};
+use nenv_visual_sim::nenv::NeuronType;
 use crate::environment::{Environment, Metrics};
 
 // Constantes de layout
