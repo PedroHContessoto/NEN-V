@@ -213,11 +213,12 @@ pub fn compute_stdp_params(
     // Ainda biologicamente plausível (~2ms em escala real)
     let refractory_period = 2i64;
 
-    // Window = 4× refractory
-    let window = refractory_period * 4;
+    // Window ampliada: 8× refractory para capturar padrões com atraso
+    let window = refractory_period * 8;
 
-    // Tau = metade da janela
-    let tau = (window as f64) / 2.0;
+    // Janela assimétrica: LTP com tau maior que LTD para favorecer causalidade tardia
+    let tau_plus = (window as f64) * 0.8; // 80% da janela
+    let tau_minus = (window as f64) * 0.3; // 30% da janela
 
     // Amplitudes: STDP 2× mais forte que Hebbian
     let stdp_strength = 2.0;
@@ -229,8 +230,8 @@ pub fn compute_stdp_params(
 
     STDPParams {
         window,
-        tau_plus: tau,
-        tau_minus: tau,
+        tau_plus,
+        tau_minus,
         a_plus,
         a_minus,
     }
@@ -296,18 +297,21 @@ pub fn compute_homeostatic_params(
     // 4. HOMEOSTASE INTERVAL: Inversamente proporcional ao target
     // FR alto → ajustes mais frequentes
     let base_interval = 150i64;
-    let homeo_interval = (base_interval as f64 / (target_firing_rate / 0.15))
-        .ceil()
-        .clamp(50.0, 300.0) as i64;
-    // Ex: target=0.22 → interval ≈ 102 steps
-    //     target=0.10 → interval ≈ 225 steps
+    let mut homeo_interval =
+        (base_interval as f64 / (target_firing_rate / 0.15)).ceil();
+    // Ajuste do grid-search: interval_multiplier = 0.858 (W65T35_eta3.3x_int0.858x)
+    homeo_interval *= 0.858;
+    let homeo_interval = homeo_interval.clamp(2.0, 300.0) as i64;
+    // Ex: target=0.22 → interval ≈ 118 steps
+    //     target=0.10 → interval ≈ 229 steps
 
     // 5. HOMEOSTASE ETA: Proporcional ao target
     // FR alto → correções mais agressivas
     let base_eta = 0.03;
-    let homeo_eta = base_eta * (target_firing_rate / 0.15).sqrt();
-    // Ex: target=0.22 → eta ≈ 0.036
-    //     target=0.10 → eta ≈ 0.024
+    // Ajuste do grid-search: eta_multiplier = 3.253
+    let homeo_eta = base_eta * (target_firing_rate / 0.15).sqrt() * 3.253;
+    // Ex: target=0.22 → eta ≈ 0.120
+    //     target=0.10 → eta ≈ 0.079
 
     // 6. BCM meta-threshold: quadrado do target FR (inalterado)
     let meta_threshold = target_firing_rate * target_firing_rate;

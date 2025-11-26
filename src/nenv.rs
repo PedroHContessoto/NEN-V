@@ -67,6 +67,12 @@ pub struct NENV {
     /// Limiar de disparo
     pub threshold: f64,
 
+    /// Limiar de disparo inicial (referência para clamps adaptativos)
+    base_threshold: f64,
+
+    /// Contador de overshoot para modular piso dinâmico
+    overshoot_count: f64,
+
     /// Estado de disparo atual
     pub is_firing: bool,
 
@@ -143,6 +149,8 @@ impl NENV {
             last_fire_time: -1,
             spike_history: VecDeque::with_capacity(10),
             threshold: initial_threshold,
+            base_threshold: initial_threshold,
+            overshoot_count: 0.0,
             is_firing: false,
             spike_origin: SpikeOrigin::None,
             output_signal: 0.0,
@@ -152,13 +160,12 @@ impl NENV {
             recent_firing_rate: 0.0,
             saved_awake_activity: 0.0,
             target_firing_rate: 0.15,  // Será sobrescrito pelo AutoConfig
-            // OTIMIZADO: Homeostase AGRESSIVA - valor encontrado por busca adaptativa
-            // Permite FR=0.180 com Consolidação 100% e STDP Ratio 7.78
-            homeo_eta: 0.05,      // Valor ótimo: resgata neurônios silenciosos rapidamente
-            homeo_interval: 10,    // Frequente o suficiente para manter equilíbrio
+            // Parâmetros homeostáticos ajustados via grid-search (W65T35_eta3.3x_int0.858x)
+            homeo_eta: 0.1627,     // 0.05 * 3.253 (grid)
+            homeo_interval: 9,     // 10 * 0.858 (grid, arredondado)
             last_homeo_update: -1,
-            homeo_weight_ratio: 0.7,     // 70% peso, 30% threshold (padrão)
-            homeo_threshold_ratio: 0.3,  // 30% threshold, 70% peso
+            homeo_weight_ratio: 0.650,    // Grid-search
+            homeo_threshold_ratio: 0.350, // Grid-search
             meta_threshold: 0.12,  // OTIMIZADO: BCM threshold
             meta_alpha: 0.005,     // OTIMIZADO: BCM learning rate
         }
@@ -206,6 +213,11 @@ impl NENV {
         if modulated_potential > adaptive_threshold && !is_in_refractory && has_energy {
             self.is_firing = true;
             self.last_fire_time = current_time;
+
+            // Overshoot tracking: incrementa se muito acima do target recente
+            if self.recent_firing_rate > self.target_firing_rate * 2.0 {
+                self.overshoot_count = (self.overshoot_count + 1.0).min(100.0);
+            }
 
             // Determina a origem do spike (STDP gated / 3-factor)
             // Regra: Se há input externo direto → Exogenous
@@ -434,10 +446,15 @@ impl NENV {
 
         self.threshold += threshold_delta;
 
-        // 🔥 LIBERAÇÃO DO "GRAMPO DO ASSASSINO":
-        // Clamp inferior de 0.3 → 0.01 (permite hipersensibilidade quando necessário)
-        // Clamp superior em 5.0 previne valores absurdos
-        self.threshold = self.threshold.clamp(0.01, 5.0);
+        // Clamp adaptativo: evita colapso/negativação sem matar autorregulação
+        let energy_frac = self.glia.energy_fraction();
+        // Overshoot aumenta o piso; decai lentamente a cada aplicação
+        self.overshoot_count *= 0.99;
+        let min_threshold = (self.base_threshold * 0.02
+            + (1.0 - energy_frac) * self.base_threshold * 0.3)
+            * (1.0 + 0.1 * self.overshoot_count)
+            .max(0.001);
+        self.threshold = self.threshold.clamp(min_threshold, 5.0);
     }
 
     /// Processa um passo completo de atualização do neurónio
@@ -523,6 +540,11 @@ impl NENV {
     /// Define o período refratário
     pub fn set_refractory_period(&mut self, period: i64) {
         self.refractory_period = period;
+    }
+
+    /// Retorna o limiar base configurado na criação
+    pub fn base_threshold(&self) -> f64 {
+        self.base_threshold
     }
 
     /// Define a taxa de atualização da memória

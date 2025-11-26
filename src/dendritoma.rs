@@ -14,6 +14,9 @@ pub struct Dendritoma {
     /// Fator de plasticidade para cada peso (modula a taxa de aprendizado)
     pub plasticity: Vec<f64>,
 
+    /// Eligibility trace por sinapse (crédito temporal)
+    pub eligibility_trace: Vec<f64>,
+
     // Parâmetros de aprendizado Hebbiano
     learning_rate: f64,
 

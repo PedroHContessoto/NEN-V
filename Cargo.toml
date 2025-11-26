@@ -34,6 +34,21 @@ path = "simulations/adaptive_learning/experiment_a_prime_pure_homeostasis.rs"
 name = "homeostasis_grid_search"
 path = "simulations/adaptive_learning/homeostasis_grid_search.rs"
 
+# Grid Search: Encontra sweet spot dos parâmetros homeostáticos loop
+[[bin]]
+name = "homeostasis_grid_search_loop"
+path = "simulations/adaptive_learning/homeostasis_grid_search_loop.rs"
+
+# Experimento C: Validação de aprendizado e estabilidade
+[[bin]]
+name = "experiment_c_learning"
+path = "simulations/adaptive_learning/experiment_c_learning.rs"
+
+# Grid search para o Experimento C
+[[bin]]
+name = "experiment_c_grid_search"
+path = "simulations/adaptive_learning/experiment_c_grid_search.rs"
+
 # Deep Diagnostic: Análise ultra-detalhada de todas as métricas
 [[bin]]
 name = "deep_diagnostic"

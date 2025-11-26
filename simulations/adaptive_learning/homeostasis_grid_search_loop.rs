@@ -79,6 +79,9 @@ fn main() {
     println!("   - Interval multiplier: 0.50-1.00x (mais estável)\n");
 
     let mut rng = StdRng::seed_from_u64(43);
+    let max_loops = 5;
+    let mut loop_idx = 0;
+    let mut found_stable = false;
 
     println!("FASE 3.1: Amostragem Global Focada (Latin Hypercube)");
     println!("   Testando 32 configuracoes na regiao promissora...\n");
@@ -150,6 +153,43 @@ fn main() {
     println!("===============================================================\n");
 
     analyze_results(&all_results);
+    // Checa se algum resultado ficou sem overshoot
+    found_stable = all_results.iter().any(|r| !r.overshoot);
+    if found_stable {
+        println!("✅ Encontrou configuração sem overshoot na primeira rodada.");
+        return;
+    }
+
+    // Se não achou resultado sem overshoot, tenta mais loops de busca focada
+    while !found_stable && loop_idx < max_loops {
+        loop_idx += 1;
+        println!("\n⚠️ Nenhum resultado sem overshoot. Reamostrando (loop {})...\n", loop_idx);
+
+        let phase1_configs = latin_hypercube_sampling(&mut rng, 48);
+        let mut extra_results = Vec::new();
+
+        for (i, config) in phase1_configs.iter().enumerate() {
+            println!("[Loop {} - Exploração {}/{}] {}", loop_idx, i + 1, phase1_configs.len(), config.name());
+            let result = run_experiment(config.clone());
+            println!(
+                "   FR: {:.4} | Erro: {:.2}% | Score: {:.3} | overshoot: {}\n",
+                result.final_fr,
+                result.final_error_pct,
+                compute_score(&result),
+                result.overshoot
+            );
+            extra_results.push(result);
+        }
+
+        all_results.extend(extra_results);
+        analyze_results(&all_results);
+        found_stable = all_results.iter().any(|r| !r.overshoot);
+
+        if found_stable {
+            println!("✅ Encontrou configuração sem overshoot no loop {}.", loop_idx);
+            break;
+        }
+    }
 
     println!("\nBusca adaptativa concluida.\n");
 }

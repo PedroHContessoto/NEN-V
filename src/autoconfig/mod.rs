@@ -374,6 +374,9 @@ impl AutoConfig {
             neuron.set_memory_alpha(params.homeostatic.memory_alpha);
             neuron.meta_threshold = params.homeostatic.meta_threshold;
             neuron.meta_alpha = params.homeostatic.meta_alpha;
+            // Ajusta proporção peso/threshold com base no grid atual (W65T35)
+            neuron.homeo_weight_ratio = 0.650;
+            neuron.homeo_threshold_ratio = 0.350;
 
             // Parâmetros do dendritoma
             neuron.dendritoma.set_learning_rate(params.learning_rate);
