@@ -1,154 +1,257 @@
-# NEN-V: Neuromorphic Energy-based Neural Virtual Model
+# NEN-V: Neuromorphic Energy-based Neural Virtual Model v2.0
 
-Uma implementação em Rust de rede neural biologicamente plausível, com mecanismos de aprendizado inspirados em neurociência.
+![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)
 
-## 🧠 Características Biológicas
+Uma implementação biologicamente plausível de rede neural em Rust, com mecanismos de aprendizado inspirados em neurociência.
 
-- **STDP (Spike-Timing-Dependent Plasticity)**: Aprendizado temporal baseado em causalidade
-- **iSTDP**: Plasticidade inibitória para equilíbrio Excitatório/Inibitório (E/I)
-- **Homeostase Sináptica**: Auto-regulação de taxa de disparo
-- **Consolidação de Memória**: Transferência STM → LTM durante ciclos de sono
-- **Modulação Glial**: Controle metabólico e energético
-- **Synaptic Tagging & Capture**: Consolidação seletiva baseada em relevância
-- **Dopamina-like Signaling**: Modulação de aprendizado por recompensa
+## 🧠 Visão Geral
 
-## 📁 Estrutura do Projeto
+O NEN-V (Neuromorphic Energy-based Neural Virtual Model) é uma biblioteca Rust que implementa redes neurais spiking com características biologicamente plausíveis:
 
-```
-nenv_visual_sim/
-├── src/                          # Biblioteca Core NEN-V
-│   ├── lib.rs                    # Ponto de entrada da biblioteca
-│   ├── nenv.rs                   # Neurônio individual (NENV)
-│   ├── dendritoma.rs             # Sistema dendrítico + aprendizado sináptico
-│   ├── glia.rs                   # Modulação glial e metabólica
-│   └── network.rs                # Orquestração de múltiplos neurônios
-│
-└── simulations/                  # Experimentos científicos
-    └── gridworld_sensorimotor/   # Aprendizado sensorimotor em GridWorld
-        ├── main.rs               # Loop principal da simulação
-        ├── environment.rs        # Ambiente GridWorld
-        └── visuals.rs            # Visualização em tempo real
+- **STDP Assimétrico**: Spike-Timing-Dependent Plasticity com janelas temporais otimizadas
+- **Homeostase Multi-escala**: Synaptic scaling, metaplasticidade BCM, threshold adaptativo
+- **Sistema Energético**: Metabolismo neural com glia e reservas energéticas
+- **Working Memory**: Pool de memória de trabalho com dinâmica de atrator
+- **Codificação Preditiva**: Hierarquia preditiva e Active Inference
+- **Curiosidade Intrínseca**: Exploração autônoma baseada em surpresa
+- **Neuromodulação**: Dopamina, norepinefrina, acetilcolina, serotonina
+
+## 📦 Instalação
+
+Adicione ao seu `Cargo.toml`:
+
+```toml
+[dependencies]
+nenv_v2 = "2.0.0"
 ```
 
-### 🎯 Filosofia de Organização
+## 🚀 Início Rápido
 
-**`src/`**: Contém apenas a **biblioteca core** do modelo NEN-V, reutilizável em diferentes contextos.
-
-**`simulations/`**: Cada subpasta é um **experimento científico independente** que usa a biblioteca core. Permite executar múltiplas simulações sem misturar código.
-
-## 🚀 Como Usar
-
-### Compilar e Rodar a Simulação GridWorld
-
-```bash
-# Modo debug (mais lento, com checks)
-cargo run --bin gridworld_sensorimotor
-
-# Modo release (otimizado, ~10x mais rápido)
-cargo run --bin gridworld_sensorimotor --release
-```
-
-### Usar a Biblioteca NEN-V em Outro Projeto
+### Criação Manual da Rede
 
 ```rust
-use nenv_visual_sim::network::{Network, ConnectivityType, LearningMode};
+use nenv_v2::prelude::*;
 
-fn main() {
-    let mut net = Network::new(
-        20,                            // 20 neurônios
-        ConnectivityType::FullyConnected,
-        0.2,                           // 20% inibitórios
-        0.15,                          // Threshold de disparo
-    );
+// Cria rede com 20 neurônios
+let mut network = Network::new(
+    20,                              // Número de neurônios
+    ConnectivityType::FullyConnected, // Topologia
+    0.2,                             // 20% inibitórios
+    0.15,                            // Threshold de disparo
+);
 
-    net.set_learning_mode(LearningMode::STDP);
-    net.set_weight_decay(0.002);
+network.set_learning_mode(LearningMode::STDP);
 
-    // Loop de simulação
-    let inputs = vec![0.0; 20];
-    net.update(&inputs);
-
-    println!("Energia média: {:.1}%", net.average_energy());
+// Loop de simulação
+for step in 0..1000 {
+    let inputs = vec![0.5; 20];  // Inputs externos
+    network.update(&inputs);
+    
+    let stats = network.get_stats();
+    println!("Step {}: FR={:.2}%", step, stats.firing_rate * 100.0);
 }
 ```
 
-## 📊 Simulação GridWorld Sensorimotor
-
-### Descrição
-
-Um agente (rede neural de 20 neurônios) aprende a navegar em um grid e coletar comida usando apenas:
-- **4 sensores direcionais** (UP, DOWN, LEFT, RIGHT)
-- **4 motores** (movimento nas 4 direções)
-- **Aprendizado por reforço** via sinal de dopamina
-
-### Configuração Atual
+### Usando AutoConfig (Recomendado)
 
 ```rust
-Neurônios: 20 (4 sensoriais + 12 internos + 4 motores)
-Topologia: FullyConnected
-Aprendizado: STDP (a_plus=0.012, a_minus=0.006)
-Weight Decay: 0.002
-Recompensa (comida): +1.0
-Punição (parede): -1.0
+use nenv_v2::autoconfig::{AutoConfig, TaskSpec, TaskType, RewardDensity};
+
+// Define tarefa de Reinforcement Learning
+let task = TaskSpec {
+    num_sensors: 8,
+    num_actuators: 4,
+    task_type: TaskType::ReinforcementLearning {
+        reward_density: RewardDensity::Auto,
+        temporal_horizon: Some(100),
+    },
+};
+
+// AutoConfig deriva automaticamente 80+ parâmetros
+let config = AutoConfig::from_task(task);
+config.print_report();
+
+// Cria rede otimizada
+let mut network = config.build_network().expect("Configuração válida");
 ```
 
-### Ciclos de Sono
+### Working Memory + Curiosidade
 
-A cada **3000 steps**, se a rede tiver aprendizado significativo (seletividade > 0.03) e experiência (≥3 sucessos), ela entra em **modo sono** por 500 steps:
-- Replay espontâneo de padrões aprendidos
-- Consolidação STM → LTM
-- Plasticity reduzida
-- Visualização do replay neural
+```rust
+use nenv_v2::working_memory::WorkingMemoryPool;
+use nenv_v2::intrinsic_motivation::CuriosityModule;
 
-### Métricas
+// Working Memory (7±2 slots como no cérebro humano)
+let mut wm = WorkingMemoryPool::new(7, 64);
+let pattern = vec![0.5; 64];
+wm.encode(pattern, 0);
 
-- **Score**: Quantas vezes comeu
-- **Seletividade**: Contraste entre pesos corretos e ruído
-- **Energia**: Custo metabólico de cada ação
-- **Exploration Rate**: Taxa de exploração aleatória
+// Curiosidade Intrínseca para exploração
+let mut curiosity = CuriosityModule::new(64, 4);
+let state = vec![0.5; 64];
+let action = vec![1.0, 0.0, 0.0, 0.0];
+let next_state = vec![0.6; 64];
 
-## 🔬 Criando uma Nova Simulação
+let intrinsic_reward = curiosity.compute_intrinsic_reward(
+    &state, &action, &next_state
+);
+println!("Recompensa intrínseca: {:.4}", intrinsic_reward);
+```
+
+## 📚 Arquitetura do Sistema
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           NEN-V v2.0 ARCHITECTURE                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                         PROCESSAMENTO                                │   │
+│  │                                                                      │   │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────────┐  │   │
+│  │  │  Sensorial  │  │   Hidden    │  │         Atuadores           │  │   │
+│  │  │  (Input)    │──│   Layer     │──│         (Output)            │  │   │
+│  │  └─────────────┘  └─────────────┘  └─────────────────────────────┘  │   │
+│  │        │                │                        │                   │   │
+│  │        ▼                ▼                        ▼                   │   │
+│  │  ┌─────────────────────────────────────────────────────────────┐    │   │
+│  │  │              WORKING MEMORY POOL (7±2 slots)                │    │   │
+│  │  └─────────────────────────────────────────────────────────────┘    │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │                       PLASTICIDADE                                   │  │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌─────────────────────────┐    │  │
+│  │  │    STDP      │  │ Eligibility  │  │   Predição/Modelo       │    │  │
+│  │  │  Adaptativo  │◄─┤   Traces     │◄─┤   Interno               │    │  │
+│  │  └──────────────┘  └──────────────┘  └─────────────────────────┘    │  │
+│  │                           │                                          │  │
+│  │                           ▼                                          │  │
+│  │                 ┌─────────────────────┐                              │  │
+│  │                 │   Neuromodulação    │                              │  │
+│  │                 │   Diferencial       │                              │  │
+│  │                 └─────────────────────┘                              │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                             │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │                        MOTIVAÇÃO                                     │  │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────────┐  │  │
+│  │  │ Curiosidade │  │ Saciedade/  │  │   Reward Extrínseco        │  │  │
+│  │  │ Intrínseca  │──┤ Necessidade │──┤   (Ambiente)               │  │  │
+│  │  └─────────────┘  └─────────────┘  └─────────────────────────────┘  │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## 🔧 Módulos
+
+### Core
+
+| Módulo | Descrição |
+|--------|-----------|
+| `nenv` | Neurônio individual (NENV) com dendritoma, glia e axônio |
+| `dendritoma` | Sistema sináptico com STDP, eligibility traces, STP |
+| `glia` | Metabolismo energético com reservas e adaptação |
+| `network` | Orquestração de múltiplos neurônios |
+| `neuromodulation` | Sistema de neuromodulação (DA, NE, ACh, 5-HT) |
+
+### Cognitivos (v2.0)
+
+| Módulo | Descrição |
+|--------|-----------|
+| `working_memory` | Pool de memória de trabalho com dinâmica de atrator |
+| `predictive` | Hierarquia preditiva e Active Inference |
+| `intrinsic_motivation` | Curiosidade intrínseca e exploração autônoma |
+
+### Configuração
+
+| Módulo | Descrição |
+|--------|-----------|
+| `autoconfig` | Configuração automática baseada na tarefa |
+
+## 📊 Mecanismos Biológicos
+
+### Plasticidade Sináptica
+- ✅ STDP Assimétrico (tau_plus > tau_minus)
+- ✅ iSTDP (Inhibitory STDP)
+- ✅ Eligibility Traces (3-factor learning)
+- ✅ Short-Term Plasticity (facilitação/depressão)
+- ✅ Synaptic Tagging and Capture
+
+### Homeostase
+- ✅ Synaptic Scaling
+- ✅ Intrinsic Plasticity (threshold adaptativo)
+- ✅ Metaplasticidade BCM
+- ✅ Controlador PID global
+
+### Metabolismo
+- ✅ Sistema energético com reserva
+- ✅ Energy-gated learning
+- ✅ Adaptação metabólica
+
+### Dinâmicas de Rede
+- ✅ Competição lateral (winner-take-all suave)
+- ✅ Normalização competitiva
+- ✅ Ciclos de sono/consolidação
+
+## 📈 Priorização de Implementação
+
+| Prioridade | Componente | Status | Impacto |
+|------------|------------|--------|---------|
+| 🔴 Alta | Working Memory | ✅ Completo | Crítico |
+| 🔴 Alta | Predição/Modelo | ✅ Completo | Crítico |
+| 🟡 Média | Curiosidade Intrínseca | ✅ Completo | Alto |
+| 🟡 Média | Replay Estruturado | 🔄 Parcial | Alto |
+| 🟢 Baixa | Atenção Top-Down | 📋 Planejado | Médio |
+
+## 🧪 Testes
 
 ```bash
-# 1. Criar nova pasta
-mkdir -p simulations/nova_simulacao
+# Todos os testes
+cargo test
 
-# 2. Criar main.rs
-cat > simulations/nova_simulacao/main.rs <<EOF
-use nenv_visual_sim::network::{Network, ConnectivityType, LearningMode};
+# Testes específicos
+cargo test working_memory
+cargo test predictive
+cargo test curiosity
 
-fn main() {
-    let mut net = Network::new(10, ConnectivityType::Grid2D, 0.2, 0.5);
-    net.set_learning_mode(LearningMode::STDP);
+# Com output detalhado
+cargo test -- --nocapture
+```
 
-    // Seu experimento aqui...
-}
-EOF
+## 📖 Exemplos
 
-# 3. Adicionar ao Cargo.toml
-[[bin]]
-name = "nova_simulacao"
-path = "simulations/nova_simulacao/main.rs"
+```bash
+# Rede básica
+cargo run --example basic_network
 
-# 4. Rodar
-cargo run --bin nova_simulacao --release
+# Agente RL
+cargo run --example rl_agent
+
+# Exploração com curiosidade
+cargo run --example curiosity_exploration
 ```
 
 ## 📚 Referências Científicas
 
-- **STDP**: Bi & Poo (1998) - "Synaptic modifications in cultured hippocampal neurons"
-- **iSTDP**: Vogels et al. (2011) - "Inhibitory Plasticity Balances Excitation and Inhibition"
-- **Synaptic Tagging**: Frey & Morris (1997) - "Synaptic tagging and long-term potentiation"
-- **Memory Consolidation**: Walker & Stickgold (2004) - "Sleep-dependent learning and memory consolidation"
+- **STDP**: Bi & Poo (1998), Markram et al. (1997)
+- **Eligibility Traces**: Izhikevich (2007)
+- **Predictive Coding**: Rao & Ballard (1999), Friston (2010)
+- **Curiosity/ICM**: Pathak et al. (2017)
+- **Homeostase**: Turrigiano (2008)
+- **BCM**: Bienenstock, Cooper & Munro (1982)
 
-## 📝 Licença
+## 📄 Licença
 
-MIT License - Veja `LICENSE` para detalhes.
+MIT License - veja [LICENSE](LICENSE) para detalhes.
 
-## 👤 Autor
+## 🤝 Contribuição
 
-Pedro H. Contessoto
+Contribuições são bem-vindas! Por favor, leia o [CONTRIBUTING.md](CONTRIBUTING.md) antes de submeter PRs.
 
 ---
 
-🤖 *Estrutura organizada com [Claude Code](https://claude.com/claude-code)*
+**Filosofia Central**: A rede não deve ser "programada" para ser inteligente; deve ter os **mecanismos corretos** para que inteligência **emerja** da interação com o ambiente.

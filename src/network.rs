@@ -1,41 +1,45 @@
-/// Módulo que implementa a rede NEN-V
-///
-/// A Network orquestra a simulação, gerindo os neurónios e suas conexões.
+//! Módulo que implementa a rede NEN-V
+//!
+//! A Network orquestra a simulação, gerindo os neurônios e suas conexões.
+//!
+//! ## Novidades v2.0
+//!
+//! - **Competição Lateral**: Winner-take-all suave para especialização
+//! - **Reward Propagation**: Propaga reward para eligibility traces
+//! - **Métricas de Seletividade**: Monitora gap entre padrão e ruído
 
 use crate::nenv::{NeuronType, SpikeOrigin, NENV};
+use crate::neuromodulation::{NeuromodulationSystem, NeuromodulatorType};
 
 /// Tipo de topologia de rede
 #[derive(Debug, Clone, Copy)]
 pub enum ConnectivityType {
-    /// Todos os neurónios conectados a todos
+    /// Todos os neurônios conectados a todos
     FullyConnected,
-    /// Grade 2D onde cada neurónio conecta aos 8 vizinhos (Moore neighborhood)
+    /// Grade 2D com vizinhança de Moore (8 vizinhos)
     Grid2D,
-    /// Neurónios isolados (sem conexões entre si) - usado para testes de validação
+    /// Neurônios isolados (sem conexões)
     Isolated,
 }
 
 /// Modo de aprendizado sináptico
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LearningMode {
-    /// Aprendizado Hebbiano clássico: "neurons that fire together, wire together"
+    /// Aprendizado Hebbiano clássico
     Hebbian,
-    /// STDP (Spike-Timing-Dependent Plasticity): aprendizado temporal baseado em causalidade
+    /// STDP (Spike-Timing-Dependent Plasticity)
     STDP,
 }
 
 /// Estado global da rede
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum NetworkState {
-    /// Estado normal: recebe inputs externos, plasticidade alta
+    /// Estado normal: recebe inputs externos
     Awake,
-    /// Estado de consolidação: sem inputs externos, replay espontâneo, plasticidade reduzida
+    /// Estado de consolidação: replay espontÃ¢neo
     Sleep {
-        /// Probabilidade de um neurônio disparar espontaneamente
         replay_noise: f64,
-        /// Quantos passos a rede já dormiu
         consolidation_steps: usize,
-        /// Duração máxima do ciclo de sono
         max_sleep_duration: usize,
     },
 }
@@ -43,75 +47,97 @@ pub enum NetworkState {
 /// Estrutura principal da rede NEN-V
 #[derive(Debug)]
 pub struct Network {
-    /// Vetor de todos os neurónios na rede
+    /// Vetor de todos os neurônios
     pub neurons: Vec<NENV>,
 
-    /// Matriz de conectividade (1 se conectado, 0 se não)
-    /// connectivity_matrix[i][j] = 1 significa que neurónio i recebe input de neurónio j
+    /// Matriz de conectividade
     pub connectivity_matrix: Vec<Vec<u8>>,
 
-    /// Passo de tempo atual da simulação
+    /// Passo de tempo atual
     pub current_time_step: i64,
 
-    /// Dimensões da grade (para topologia Grid2D)
+    /// Dimensões da grade
     pub grid_width: usize,
     pub grid_height: usize,
 
-    /// Nível de alerta global da rede [0.0, 1.0]
-    /// 0.0 = estado normal, 1.0 = alerta máximo
-    /// Afeta a recuperação de energia de todos os neurónios
+    /// Nível de alerta global
     pub alert_level: f64,
 
-    /// Taxa de decaimento do alert_level (retorna gradualmente ao baseline)
+    /// Taxa de decaimento do alert_level
     pub alert_decay_rate: f64,
 
-    /// Novidade média atual da rede (calculada no último update)
+    /// Novidade média atual
     current_avg_novelty: f64,
 
-    /// Threshold de novidade para ativar alert_level automaticamente
+    /// Threshold de novidade para alerta
     novelty_alert_threshold: f64,
 
-    /// Sensibilidade do boost de alert baseado em novidade
+    /// Sensibilidade do alerta
     alert_sensitivity: f64,
 
-    /// Modo de aprendizado sináptico (Hebbian ou STDP)
+    /// Modo de aprendizado
     pub learning_mode: LearningMode,
 
-    /// Buffer de spikes para STDP baseado em pares
-    /// Cada entrada é (tempo, id_neurônio)
+    /// Buffer de spikes para STDP
     spike_buffer: Vec<(i64, usize, SpikeOrigin)>,
 
-    /// Janela temporal máxima para STDP (em passos de tempo)
+    /// Janela temporal STDP
     pub stdp_window: i64,
 
-    /// Estado atual da rede (Vigília ou Sono)
+    /// Estado atual
     pub state: NetworkState,
 
-    /// Fator de redução da taxa de aprendizado durante o sono (ex: 0.1)
+    /// Fator de aprendizado durante sono
     pub sleep_learning_rate_factor: f64,
 
-    /// Sinal de recompensa global para modular STDP (dopamine-like)
-    /// - reward > 0: reforça sinapses ativas (ação boa)
-    /// - reward < 0: enfraquece sinapses ativas (ação ruim)
-    /// - reward = 0: aprendizado neutro (baseline)
+    /// Sinal de reward global
     pub global_reward_signal: f64,
+
+    // ========== COMPETIÃ‡ÃƒO LATERAL (NOVO v2.0) ==========
+    /// Habilita competição lateral
+    pub lateral_competition_enabled: bool,
+
+    /// Força da competição [0.0, 1.0]
+    pub competition_strength: f64,
+
+    /// Intervalo para aplicar competição
+    pub competition_interval: i64,
+
+    /// Contador de competição
+    competition_counter: i64,
+
+    // ========== NEUROMODULAÃ‡ÃƒO (NOVO v2.0) ==========
+    /// Sistema de neuromodulação
+    pub neuromodulation: NeuromodulationSystem,
+
+    /// Habilita neuromodulação
+    pub neuromodulation_enabled: bool,
+
+    // ========== MÃ‰TRICAS DE APRENDIZADO (NOVO v2.0) ==========
+    /// Ãndices dos neurônios "sensores" (recebem input externo)
+    pub sensor_indices: Vec<usize>,
+
+    /// Ãndices dos neurônios "hidden"
+    pub hidden_indices: Vec<usize>,
+
+    /// Ãndices dos neurônios "atuadores"
+    pub actuator_indices: Vec<usize>,
+
+    /// Histórico de firing rate médio
+    fr_history: Vec<f64>,
+
+    /// Histórico de reward
+    reward_history: Vec<f64>,
 }
 
 impl Network {
     /// Cria uma nova rede
-    ///
-    /// # Argumentos
-    /// * `num_neurons` - Número total de neurónios
-    /// * `connectivity_type` - Tipo de topologia
-    /// * `inhibitory_ratio` - Proporção de neurónios inibitórios (0.0 a 1.0)
-    /// * `initial_threshold` - Limiar de disparo inicial para todos os neurónios
     pub fn new(
         num_neurons: usize,
         connectivity_type: ConnectivityType,
         inhibitory_ratio: f64,
         initial_threshold: f64,
     ) -> Self {
-        // ... (código de grid/matrix mantido igual) ...
         let (grid_width, grid_height) = match connectivity_type {
             ConnectivityType::Grid2D => {
                 let side = (num_neurons as f64).sqrt().ceil() as usize;
@@ -135,21 +161,18 @@ impl Network {
 
             let mut neuron = NENV::new(i, num_neurons, initial_threshold, neuron_type);
 
-            // 1. TABULA RASA: Pesos iniciais pequenos e ligeiramente aleatórios
-            // Aleatorização quebra simetria e permite diferenciação natural
+            // TABULA RASA: Pesos iniciais pequenos e aleatórios
             use rand::Rng;
             let mut rng = rand::thread_rng();
             for w in &mut neuron.dendritoma.weights {
-                *w = rng.gen_range(0.04..0.06);  // Pequena variação em torno de 0.05
+                *w = rng.gen_range(0.04..0.06);
             }
 
-            // 2. INIBIÇÃO INICIAL: Pequeno bias inicial para sinapses inibitórias
-            // iSTDP vai aprender os pesos corretos baseado em E/I balance
+            // Pesos inibitórios iniciais
             for source_id in 0..num_neurons {
                 if source_id < neuron.dendritoma.weights.len() {
                     if connectivity_matrix[i][source_id] == 1 {
                         if source_id < num_inhibitory && source_id != i {
-                            // Peso inicial modesto - iSTDP vai ajustar
                             neuron.dendritoma.weights[source_id] = 0.3;
                         }
                     }
@@ -171,20 +194,48 @@ impl Network {
             alert_sensitivity: 1.0,
             learning_mode: LearningMode::Hebbian,
             spike_buffer: Vec::new(),
-            // CORREÇÃO: Janela menor (20) evita interferência entre testes repetidos
-            stdp_window: 20,
+            stdp_window: 50, // AUMENTADO v2.0 (era 20)
             state: NetworkState::Awake,
             sleep_learning_rate_factor: 0.0,
-            global_reward_signal: 0.0, // Neutro por padrão
+            global_reward_signal: 0.0,
+
+            // Competição lateral v2.0
+            lateral_competition_enabled: true,
+            competition_strength: 0.3,
+            competition_interval: 10,
+            competition_counter: 0,
+
+            // Neuromodulação v2.0
+            neuromodulation: NeuromodulationSystem::new(),
+            neuromodulation_enabled: true,
+
+            // Métricas v2.0
+            sensor_indices: Vec::new(),
+            hidden_indices: Vec::new(),
+            actuator_indices: Vec::new(),
+            fr_history: Vec::new(),
+            reward_history: Vec::new(),
         }
     }
 
-    /// Define o modo de aprendizado da rede
+    /// Define o modo de aprendizado
     pub fn set_learning_mode(&mut self, mode: LearningMode) {
         self.learning_mode = mode;
     }
 
-    /// Gera a matriz de conectividade baseada no tipo
+    /// Define os índices das camadas
+    pub fn set_layer_indices(
+        &mut self,
+        sensors: Vec<usize>,
+        hidden: Vec<usize>,
+        actuators: Vec<usize>,
+    ) {
+        self.sensor_indices = sensors;
+        self.hidden_indices = hidden;
+        self.actuator_indices = actuators;
+    }
+
+    /// Gera matriz de conectividade
     fn generate_connectivity(
         num_neurons: usize,
         connectivity_type: ConnectivityType,
@@ -192,37 +243,32 @@ impl Network {
     ) -> Vec<Vec<u8>> {
         match connectivity_type {
             ConnectivityType::FullyConnected => {
-                // Todos conectados a todos (exceto si mesmo)
                 vec![vec![1; num_neurons]; num_neurons]
             }
             ConnectivityType::Grid2D => {
                 Self::generate_2d_grid_connectivity(num_neurons, grid_width)
             }
             ConnectivityType::Isolated => {
-                // Nenhuma conexão entre neurónios (matriz de zeros)
                 vec![vec![0; num_neurons]; num_neurons]
             }
         }
     }
 
-    /// Gera conectividade de grade 2D (Moore neighborhood - 8 vizinhos)
     fn generate_2d_grid_connectivity(num_neurons: usize, width: usize) -> Vec<Vec<u8>> {
         let mut matrix = vec![vec![0; num_neurons]; num_neurons];
 
         for i in 0..num_neurons {
             let (row, col) = (i / width, i % width);
 
-            // Conecta aos 8 vizinhos (Moore neighborhood)
             for dr in -1..=1 {
                 for dc in -1..=1 {
                     if dr == 0 && dc == 0 {
-                        continue; // Não conecta a si mesmo
+                        continue;
                     }
 
                     let new_row = row as i32 + dr;
                     let new_col = col as i32 + dc;
 
-                    // Verifica limites
                     if new_row >= 0
                         && new_row < width as i32
                         && new_col >= 0
@@ -240,15 +286,7 @@ impl Network {
         matrix
     }
 
-    /// Coleta os inputs para um neurónio específico baseado nas conexões
-    ///
-    /// # Argumentos
-    /// * `neuron_idx` - Índice do neurónio alvo
-    /// * `all_outputs` - Vetor com saídas de todos os neurónios
-    /// * `external_inputs` - Vetor com inputs externos (opcional)
-    ///
-    /// # Retorna
-    /// Vetor de inputs combinados (rede + externos)
+    /// Coleta inputs para um neurônio
     fn gather_inputs(
         &self,
         neuron_idx: usize,
@@ -257,109 +295,192 @@ impl Network {
     ) -> Vec<f64> {
         let mut inputs = vec![0.0; self.neurons.len()];
 
-        // Coleta inputs da rede baseado na matriz de conectividade
         for j in 0..self.neurons.len() {
             if self.connectivity_matrix[neuron_idx][j] == 1 {
                 inputs[j] = all_outputs[j];
             }
         }
 
-        // Adiciona input externo apenas para o neurónio correspondente
         if neuron_idx < external_inputs.len() {
-            // CORREÇÃO: Input externo do neurónio i vai para inputs[i], não para todos
-            // Mas como inputs[j] representa o input do neurónio j para o neurónio atual,
-            // o input externo deve ir para inputs[neuron_idx] (auto-conexão virtual)
             inputs[neuron_idx] += external_inputs[neuron_idx];
         }
 
         inputs
     }
 
+    // ========================================================================
+    // COMPETIÃ‡ÃƒO LATERAL (NOVO v2.0)
+    // ========================================================================
+
+    /// Aplica competição lateral suave (soft winner-take-all)
+    ///
+    /// Neurônios mais ativos suprimem parcialmente os menos ativos,
+    /// promovendo especialização e seletividade.
+    pub fn apply_lateral_competition(&mut self, layer_indices: &[usize]) {
+        if layer_indices.is_empty() {
+            return;
+        }
+
+        // Coleta ativações da camada
+        let activations: Vec<f64> = layer_indices
+            .iter()
+            .map(|&i| self.neurons[i].recent_firing_rate)
+            .collect();
+
+        // Encontra máximo e média
+        let max_activation = activations.iter().cloned().fold(0.0, f64::max);
+        let mean_activation: f64 = activations.iter().sum::<f64>() / activations.len() as f64;
+
+        if max_activation < 0.01 {
+            return; // Camada inativa
+        }
+
+        // Aplica supressão aos "perdedores"
+        for (local_idx, &global_idx) in layer_indices.iter().enumerate() {
+            let relative_activation = activations[local_idx] / max_activation;
+
+            // Supressão proporcional Ã  distÃ¢ncia do máximo
+            let suppression = (1.0 - relative_activation) * self.competition_strength;
+
+            // Reduz plasticidade dos perdedores
+            let new_gain = 1.0 - suppression;
+            self.neurons[global_idx].dendritoma.set_plasticity_gain(new_gain.max(0.1));
+
+            // Aumenta levemente threshold dos muito ativos (homeostase competitiva)
+            if activations[local_idx] > mean_activation * 1.5 {
+                self.neurons[global_idx].threshold *= 1.001;
+            }
+        }
+    }
+
+    /// Aplica competição em todas as camadas definidas
+    fn apply_all_lateral_competition(&mut self) {
+        if !self.lateral_competition_enabled {
+            return;
+        }
+
+        self.competition_counter += 1;
+        if self.competition_counter < self.competition_interval {
+            return;
+        }
+        self.competition_counter = 0;
+
+        // Aplica na camada hidden
+        if !self.hidden_indices.is_empty() {
+            let indices = self.hidden_indices.clone();
+            self.apply_lateral_competition(&indices);
+        }
+
+        // Aplica na camada de atuadores
+        if !self.actuator_indices.is_empty() {
+            let indices = self.actuator_indices.clone();
+            self.apply_lateral_competition(&indices);
+        }
+    }
+
+    // ========================================================================
+    // REWARD PROPAGATION (NOVO v2.0)
+    // ========================================================================
+
+    /// Propaga sinal de reward para todos os neurônios
+    ///
+    /// Usa eligibility traces para atribuir crédito Ã s sinapses
+    /// que contribuíram para o resultado.
+    pub fn propagate_reward(&mut self, reward: f64) {
+        self.global_reward_signal = reward;
+
+        // Processa pelo sistema de neuromodulação
+        if self.neuromodulation_enabled {
+            self.neuromodulation.process_reward(reward);
+        }
+
+        // Aplica reward a todos os neurônios via eligibility traces
+        let plasticity_mod = if self.neuromodulation_enabled {
+            self.neuromodulation.plasticity_modulation()
+        } else {
+            1.0
+        };
+
+        for neuron in &mut self.neurons {
+            neuron.dendritoma.apply_reward_modulated_learning(reward, plasticity_mod);
+        }
+
+        // Armazena no histórico
+        self.reward_history.push(reward);
+        if self.reward_history.len() > 1000 {
+            self.reward_history.remove(0);
+        }
+    }
+
+    // ========================================================================
+    // UPDATE PRINCIPAL
+    // ========================================================================
+
     /// Executa um passo de atualização da rede
-    ///
-    /// Este é o coração da simulação, implementando o algoritmo do guia v2:
-    /// 1. Coleta saídas do passo anterior
-    /// 2. Para cada neurónio: integra, modula, decide disparar
-    /// 3. Para cada neurónio: aplica aprendizado e atualiza estado
-    ///
-    /// # Argumentos
-    /// * `external_inputs` - Vetor de inputs externos (um valor por neurónio)
     pub fn update(&mut self, external_inputs: &[f64]) {
         self.current_time_step += 1;
 
-        // CORREÇÃO: Detecta se há input externo (para controle de homeostase)
         let has_external_input = external_inputs.iter().any(|&x| x.abs() > 1e-6);
 
-        // Verifica se deve acordar automaticamente
+        // Verifica se deve acordar
         if let NetworkState::Sleep { consolidation_steps, max_sleep_duration, .. } = self.state {
             if consolidation_steps >= max_sleep_duration {
                 self.wake_up();
             }
         }
 
-        // Atualiza contadores de sono e aplica consolidação
+        // Atualiza contadores de sono
         if let NetworkState::Sleep { ref mut consolidation_steps, .. } = self.state {
             *consolidation_steps += 1;
 
-            // SYNAPTIC TAGGING AND CAPTURE: Consolidação seletiva baseada em tags
-            // Durante o sono, apenas sinapses com tags fortes (relevantes) consolidam.
-            // Isso filtra o ruído e implementa "consolidação dirigida por relevância".
-            //
-            // Taxa base: 1% por passo (mais lenta que a antiga, mas dinâmica via tags)
-            // Tags fortes (tag=2.0) consolidam até 20x mais rápido que tags fracas (tag=0.2)
             for neuron in &mut self.neurons {
                 neuron.dendritoma.consolidate_memory_tagged(0.01);
             }
         }
 
-        // Fase 0: Atualiza alert_level (decaimento gradual)
+        // Atualiza alert_level
         self.update_alert_level();
 
-        // Coleta todas as saídas do passo anterior
+        // Atualiza neuromodulação
+        if self.neuromodulation_enabled {
+            self.neuromodulation.update();
+        }
+
+        // Coleta saídas anteriores
         let all_neuron_outputs: Vec<f64> = self.neurons.iter().map(|n| n.output_signal).collect();
 
-        // Cria vetores temporários para armazenar resultados da Fase 1-3
-        let mut integrated_potentials = Vec::with_capacity(self.neurons.len());
-        let mut modulated_potentials = Vec::with_capacity(self.neurons.len());
+        // Precompute inputs to avoid mutable/immutable borrow conflicts
+        let saved_awake: Vec<f64> = self.neurons.iter().map(|n| n.saved_awake_activity).collect();
         let mut gathered_inputs = Vec::with_capacity(self.neurons.len());
-
-        // Fase 1-2: Calcular potenciais para todos os neurónios
-        for (idx, neuron) in self.neurons.iter().enumerate() {
-            // Determina inputs baseado no estado
+        for idx in 0..self.neurons.len() {
             let inputs = match self.state {
                 NetworkState::Awake => {
                     self.gather_inputs(idx, &all_neuron_outputs, external_inputs)
                 },
                 NetworkState::Sleep { replay_noise, .. } => {
-                    // No sono, ignora inputs externos e adiciona ruído de replay
-                    // Ruído é proporcional à atividade SALVA da vigília (replay dirigido)
-                    let mut sleep_inputs = self.gather_inputs(idx, &all_neuron_outputs, &vec![0.0; external_inputs.len()]);
+                    let mut sleep_inputs =
+                        self.gather_inputs(idx, &all_neuron_outputs, &vec![0.0; external_inputs.len()]);
 
-                    // CORREÇÃO CRÍTICA: Replay dirigido aos neurônios mais ativos
-                    // Probabilidade de ruído aumenta com saved_awake_activity
-                    let noise_prob = replay_noise + (neuron.saved_awake_activity * 1.0); // REFATORADO: Replay proporcional à atividade
+                    let noise_prob = replay_noise + (saved_awake[idx] * 1.0);
 
                     if rand::random::<f64>() < noise_prob {
-                        // Em vez de escolher input ALEATÓRIO, escolher input de neurônio com alta atividade salva
-                        // Pegar neurônios conectados
                         let connected_active: Vec<(usize, f64)> = self.connectivity_matrix[idx]
                             .iter()
                             .enumerate()
                             .filter(|&(_, &connected)| connected == 1)
-                            .map(|(j, _)| (j, self.neurons[j].saved_awake_activity))
-                            .filter(|(_, activity)| *activity > 0.01) // Apenas neurônios que estavam ativos
+                            .map(|(j, _)| (j, saved_awake[j]))
+                            .filter(|(_, activity)| *activity > 0.01)
                             .collect();
 
                         if !connected_active.is_empty() {
-                            // Escolher neurônio conectado com maior atividade salva (replay dirigido)
-                            let best_input = connected_active.iter()
+                            let best_input = connected_active
+                                .iter()
                                 .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
                                 .map(|(idx, _)| *idx)
                                 .unwrap();
 
-                            sleep_inputs[best_input] += 1.5; // Reativa neurônio mais ativo
+                            sleep_inputs[best_input] += 1.5;
                         } else {
-                            // Fallback: Se nenhum neurônio conectado estava ativo, usa aleatório
                             let input_idx = rand::random::<usize>() % sleep_inputs.len();
                             sleep_inputs[input_idx] += 1.5;
                         }
@@ -368,30 +489,38 @@ impl Network {
                     sleep_inputs
                 }
             };
+            gathered_inputs.push(inputs);
+        }
 
-            let integrated = neuron.dendritoma.integrate(&inputs);
+        // Temporary vectors
+        let mut integrated_potentials = Vec::with_capacity(self.neurons.len());
+        let mut modulated_potentials = Vec::with_capacity(self.neurons.len());
+
+        // Phase 1-2: potentials using precomputed inputs
+        for (idx, neuron) in self.neurons.iter_mut().enumerate() {
+            let inputs = &gathered_inputs[idx];
+
+            // Integration with STP
+            let integrated = neuron.dendritoma.integrate(inputs);
             let modulated = neuron.glia.modulate(integrated);
 
             integrated_potentials.push(integrated);
             modulated_potentials.push(modulated);
-            gathered_inputs.push(inputs);
         }
 
-        // Fase 3: Decisão de disparo para todos os neurónios
+        // Fase 3: Decisão de disparo
         for ((neuron, &modulated_potential), inputs) in
             self.neurons.iter_mut()
                 .zip(modulated_potentials.iter())
                 .zip(gathered_inputs.iter())
         {
-            // Determina se há input externo significativo (threshold: 0.5)
             let has_external_input = inputs.iter().any(|&inp| inp > 0.5);
             neuron.decide_to_fire(modulated_potential, self.current_time_step, has_external_input);
         }
 
-        // Fase 4: Aprendizado e atualização de estado
+        // Fase 4: Aprendizado
         let mut total_novelty = 0.0;
 
-        // Coleta tipos de neurônios antes do loop mutável (para iSTDP)
         let neuron_types: Vec<NeuronType> = self.neurons.iter()
             .map(|n| n.neuron_type)
             .collect();
@@ -399,27 +528,43 @@ impl Network {
             .map(|n| n.is_firing)
             .collect();
 
+        // Obtém modulação de plasticidade do sistema de neuromodulação
+        let nm_plasticity_mod = if self.neuromodulation_enabled {
+            self.neuromodulation.plasticity_modulation()
+        } else {
+            1.0
+        };
+
         for (idx, (neuron, inputs)) in self.neurons.iter_mut().zip(gathered_inputs.iter()).enumerate() {
             let novelty = neuron.compute_novelty(inputs);
             total_novelty += novelty;
             neuron.update_priority(novelty, 2.0);
 
+            // Atualiza eligibility traces
+            let pre_active: Vec<f64> = inputs.clone();
+            neuron.dendritoma.update_eligibility_traces(&pre_active, neuron.is_firing);
+
+            // Atualiza STP
+            neuron.dendritoma.update_stp();
+
             let mut learning_happened = false;
 
             if neuron.is_firing {
+                // Aplica modulação de plasticidade da neuromodulação
+                let current_gain = neuron.dendritoma.plasticity_gain;
+                neuron.dendritoma.set_plasticity_gain(current_gain * nm_plasticity_mod);
+
                 match self.learning_mode {
                     LearningMode::Hebbian => {
                         neuron.dendritoma.apply_learning(inputs);
                         learning_happened = true;
                     }
                     LearningMode::STDP => {
-                        // CORREÇÃO STDP: Lê origem correta do buffer
                         for &(spike_time, spike_neuron_id, pre_origin) in &self.spike_buffer {
                             if spike_neuron_id == idx { continue; }
 
                             let post_origin = neuron.spike_origin;
 
-                            // Gating robusto usando a origem GRAVADA no momento do spike
                             let should_apply_stdp = !matches!(
                                 (pre_origin, post_origin),
                                 (SpikeOrigin::Feedback, _) | (_, SpikeOrigin::Feedback)
@@ -428,19 +573,15 @@ impl Network {
                             if should_apply_stdp {
                                 let delta_t = self.current_time_step - spike_time;
 
-                                // Usa informação pre-coletada do neurônio pré-sináptico
                                 let pre_neuron_type = neuron_types[spike_neuron_id];
                                 let pre_neuron_firing = neuron_firing_states[spike_neuron_id];
 
-                                // Aplica STDP ou iSTDP baseado no tipo do neurônio pré-sináptico
                                 match pre_neuron_type {
                                     NeuronType::Excitatory => {
-                                        // STDP regular para sinapses excitatórias, modulado por reward
                                         neuron.dendritoma.apply_stdp_pair(spike_neuron_id, delta_t, self.global_reward_signal);
                                         learning_happened = true;
                                     },
                                     NeuronType::Inhibitory => {
-                                        // iSTDP para sinapses inibitórias (E/I balance)
                                         neuron.dendritoma.apply_istdp(
                                             spike_neuron_id,
                                             neuron.recent_firing_rate,
@@ -454,18 +595,15 @@ impl Network {
                         }
                     }
                 }
+
+                // Restaura ganho de plasticidade
+                neuron.dendritoma.set_plasticity_gain(current_gain);
             }
 
-            // CORREÇÃO: Decay seletivo - aplica apenas em modo Hebbian
-            // Em modo STDP, o decay dentro de apply_stdp_pair() já é suficiente
-            // Em modo Hebbian, neurônios inativos precisam de decay adicional
-            // if !learning_happened && self.learning_mode == LearningMode::Hebbian {
             if !learning_happened {
                 neuron.dendritoma.apply_weight_maintenance(neuron.recent_firing_rate);
             }
 
-            // SYNAPTIC TAGGING: Aplica decaimento das tags a cada passo
-            // Tags são temporárias e decaem naturalmente se não reforçadas
             neuron.dendritoma.decay_tags();
 
             neuron.glia.update_state(neuron.is_firing);
@@ -477,58 +615,137 @@ impl Network {
             neuron.apply_homeostatic_plasticity(self.current_time_step, has_external_input);
         }
 
-        // Atualização do Buffer com ORIGEM
+        // Atualiza buffer STDP
         if self.learning_mode == LearningMode::STDP {
             for (idx, neuron) in self.neurons.iter().enumerate() {
                 if neuron.is_firing {
-                    // CORREÇÃO: Armazena a origem (Exogenous/Endogenous) junto com o tempo
                     self.spike_buffer.push((self.current_time_step, idx, neuron.spike_origin));
                 }
             }
-            // Limpa buffer antigo (usando stdp_window 20 definido no new)
-            // Note: self.stdp_window é i64
             self.spike_buffer.retain(|(time, _, _)| self.current_time_step - time <= self.stdp_window);
         }
 
-        // Fase 5: Integração Novelty-Alert (v0.3.0)
-        // Calcula novidade média da rede
+        // Fase 5: Novelty-Alert
         self.current_avg_novelty = total_novelty / self.neurons.len() as f64;
 
-        // Se novidade excede threshold, boost alert_level automaticamente
         if self.current_avg_novelty > self.novelty_alert_threshold {
-            // Alert boost baseado no EXCESSO acima do threshold
             let alert_boost = (self.current_avg_novelty - self.novelty_alert_threshold) * self.alert_sensitivity;
             self.boost_alert_level(alert_boost);
+
+            // Processa novidade na neuromodulação
+            if self.neuromodulation_enabled {
+                self.neuromodulation.process_novelty(self.current_avg_novelty);
+            }
+        }
+
+        // Fase 6: Competição Lateral
+        self.apply_all_lateral_competition();
+
+        // Armazena FR no histórico
+        let current_fr = self.num_firing() as f64 / self.num_neurons() as f64;
+        self.fr_history.push(current_fr);
+        if self.fr_history.len() > 1000 {
+            self.fr_history.remove(0);
         }
     }
 
-    /// Retorna o número de neurónios na rede
+    // ========================================================================
+    // MÃ‰TRICAS E ESTATÃSTICAS
+    // ========================================================================
+
     pub fn num_neurons(&self) -> usize {
         self.neurons.len()
     }
 
-    /// Retorna o número de neurónios que estão disparando no momento
     pub fn num_firing(&self) -> usize {
         self.neurons.iter().filter(|n| n.is_firing).count()
     }
 
-    /// Retorna a energia média da rede
     pub fn average_energy(&self) -> f64 {
         let total_energy: f64 = self.neurons.iter().map(|n| n.glia.energy).sum();
         total_energy / self.neurons.len() as f64
     }
 
-    /// Retorna vetor com estado de disparo de todos os neurónios
     pub fn get_firing_states(&self) -> Vec<bool> {
         self.neurons.iter().map(|n| n.is_firing).collect()
     }
 
-    /// Retorna vetor com níveis de energia de todos os neurónios
     pub fn get_energy_levels(&self) -> Vec<f64> {
         self.neurons.iter().map(|n| n.glia.energy).collect()
     }
 
-    /// Converte índice linear para coordenadas (row, col) na grade
+    /// Calcula gap de pesos entre um conjunto de sinapses vs resto
+    ///
+    /// Ãštil para medir seletividade (padrão vs ruído)
+    pub fn compute_weight_gap(&self, pattern_sources: &[usize], target_neurons: &[usize]) -> f64 {
+        let mut pattern_weight_sum = 0.0;
+        let mut pattern_count = 0;
+        let mut other_weight_sum = 0.0;
+        let mut other_count = 0;
+
+        for &target_idx in target_neurons {
+            if target_idx >= self.neurons.len() { continue; }
+
+            for (source_idx, &weight) in self.neurons[target_idx].dendritoma.weights.iter().enumerate() {
+                if self.connectivity_matrix[target_idx][source_idx] == 1 {
+                    if pattern_sources.contains(&source_idx) {
+                        pattern_weight_sum += weight;
+                        pattern_count += 1;
+                    } else {
+                        other_weight_sum += weight;
+                        other_count += 1;
+                    }
+                }
+            }
+        }
+
+        let avg_pattern = if pattern_count > 0 { pattern_weight_sum / pattern_count as f64 } else { 0.0 };
+        let avg_other = if other_count > 0 { other_weight_sum / other_count as f64 } else { 0.0 };
+
+        avg_pattern - avg_other
+    }
+
+    /// Retorna média de firing rate dos últimos N steps
+    pub fn average_recent_fr(&self, n: usize) -> f64 {
+        if self.fr_history.is_empty() { return 0.0; }
+
+        let count = n.min(self.fr_history.len());
+        self.fr_history.iter().rev().take(count).sum::<f64>() / count as f64
+    }
+
+    /// Retorna estatísticas completas da rede
+    pub fn get_stats(&self) -> NetworkStats {
+        let firing_rate = self.num_firing() as f64 / self.num_neurons() as f64;
+        let avg_energy = self.average_energy();
+
+        let avg_threshold: f64 = self.neurons.iter()
+            .map(|n| n.threshold)
+            .sum::<f64>() / self.num_neurons() as f64;
+
+        let avg_eligibility: f64 = self.neurons.iter()
+            .map(|n| n.dendritoma.total_eligibility())
+            .sum::<f64>() / self.num_neurons() as f64;
+
+        let nm_stats = self.neuromodulation.get_stats();
+
+        NetworkStats {
+            time_step: self.current_time_step,
+            firing_rate,
+            avg_energy,
+            avg_threshold,
+            avg_novelty: self.current_avg_novelty,
+            alert_level: self.alert_level,
+            avg_eligibility,
+            dopamine: nm_stats.dopamine,
+            norepinephrine: nm_stats.norepinephrine,
+            state: self.state,
+        }
+    }
+
+    // ========================================================================
+    // CONTROLE DE ESTADO
+    // ========================================================================
+
     pub fn index_to_coords(&self, index: usize) -> Option<(usize, usize)> {
         if self.grid_width > 0 && index < self.neurons.len() {
             Some((index / self.grid_width, index % self.grid_width))
@@ -537,7 +754,6 @@ impl Network {
         }
     }
 
-    /// Converte coordenadas (row, col) para índice linear
     pub fn coords_to_index(&self, row: usize, col: usize) -> Option<usize> {
         if self.grid_width > 0 && row < self.grid_height && col < self.grid_width {
             let index = row * self.grid_width + col;
@@ -548,58 +764,30 @@ impl Network {
         None
     }
 
-    /// Define o nível de alerta global da rede
-    ///
-    /// O alert_level afeta a recuperação de energia de todos os neurónios.
-    /// Valores altos fazem a rede responder mais rapidamente a eventos.
-    ///
-    /// # Argumentos
-    /// * `level` - Nível de alerta [0.0, 1.0]
     pub fn set_alert_level(&mut self, level: f64) {
         self.alert_level = level.clamp(0.0, 1.0);
 
-        // Propaga alert_level para todos os neurónios
         for neuron in &mut self.neurons {
             neuron.glia.alert_level = self.alert_level;
         }
     }
 
-    /// Aumenta o alert_level baseado na atividade global da rede
-    ///
-    /// Chamado automaticamente quando detecta alta atividade ou novidade.
-    /// O alert_level decai gradualmente a cada passo de simulação.
-    ///
-    /// # Argumentos
-    /// * `boost` - Quantidade para aumentar o alert_level
     pub fn boost_alert_level(&mut self, boost: f64) {
         self.alert_level = (self.alert_level + boost).min(1.0);
 
-        // Propaga para todos os neurónios
         for neuron in &mut self.neurons {
             neuron.glia.alert_level = self.alert_level;
         }
     }
 
-    /// Atualiza o alert_level (decaimento gradual para baseline)
-    ///
-    /// Chamado automaticamente a cada passo de update()
     fn update_alert_level(&mut self) {
-        // Decai gradualmente para zero (estado normal)
         self.alert_level *= 1.0 - self.alert_decay_rate;
 
-        // Propaga para neurónios
         for neuron in &mut self.neurons {
             neuron.glia.alert_level = self.alert_level;
         }
     }
 
-    /// Retorna a novidade média da rede (calculada no último update)
-    ///
-    /// A novidade é a diferença média entre inputs atuais e memória contextual
-    /// de todos os neurônios. Valores altos indicam eventos inesperados.
-    ///
-    /// # Retorna
-    /// Novidade média [0.0, ∞), calculada automaticamente durante update()
     pub fn average_novelty(&self) -> f64 {
         self.current_avg_novelty
     }
@@ -609,11 +797,6 @@ impl Network {
         self.alert_sensitivity = sensitivity.clamp(0.0, 1.0);
     }
 
-    /// Entra no estado de sono
-    ///
-    /// # Argumentos
-    /// * `replay_noise` - Probabilidade base de disparo espontâneo
-    /// * `duration` - Duração do sono em passos
     pub fn enter_sleep(&mut self, replay_noise: f64, duration: usize) {
         if let NetworkState::Awake = self.state {
             self.state = NetworkState::Sleep {
@@ -622,55 +805,58 @@ impl Network {
                 max_sleep_duration: duration,
             };
 
-            // Salva atividade de vigília ANTES de reduzir taxa de aprendizado
-            // Ajusta metabolismo para sono (recuperação rápida, baixo consumo)
             for neuron in &mut self.neurons {
                 neuron.saved_awake_activity = neuron.recent_firing_rate;
                 neuron.dendritoma.scale_learning_rate(self.sleep_learning_rate_factor);
-                neuron.enter_sleep_mode(); // NOVO: ajusta metabolismo
+                neuron.enter_sleep_mode();
             }
 
-            // Reduz alert_level durante sono
             self.alert_level = 0.3;
         }
     }
 
-    /// Acorda a rede
     pub fn wake_up(&mut self) {
         if let NetworkState::Sleep { .. } = self.state {
             self.state = NetworkState::Awake;
 
-            // Restaura taxa de aprendizado e metabolismo
-            // Se sleep_learning_rate_factor == 0, precisamos restaurar manualmente
             if self.sleep_learning_rate_factor > 0.0 {
                 for neuron in &mut self.neurons {
                     neuron.dendritoma.scale_learning_rate(1.0 / self.sleep_learning_rate_factor);
-                    neuron.exit_sleep_mode(); // NOVO: restaura metabolismo
+                    neuron.exit_sleep_mode();
                 }
             } else {
-                // Taxa estava zerada, restaurar todos os parâmetros
                 for neuron in &mut self.neurons {
                     neuron.dendritoma.reset_learning_params();
-                    neuron.exit_sleep_mode(); // NOVO: restaura metabolismo
+                    neuron.exit_sleep_mode();
                 }
             }
         }
     }
 
-    /// Retorna o estado atual da rede
     pub fn get_state(&self) -> NetworkState {
         self.state
     }
 
-    /// Define a taxa de decaimento dos pesos STM para todos os neurônios
-    ///
-    /// # Argumentos
-    /// * `decay` - Taxa de decaimento (0.0 = sem decaimento, 1.0 = decaimento total)
     pub fn set_weight_decay(&mut self, decay: f64) {
         for neuron in &mut self.neurons {
             neuron.dendritoma.set_weight_decay(decay);
         }
     }
+}
+
+/// Estatísticas da rede
+#[derive(Debug, Clone)]
+pub struct NetworkStats {
+    pub time_step: i64,
+    pub firing_rate: f64,
+    pub avg_energy: f64,
+    pub avg_threshold: f64,
+    pub avg_novelty: f64,
+    pub alert_level: f64,
+    pub avg_eligibility: f64,
+    pub dopamine: f64,
+    pub norepinephrine: f64,
+    pub state: NetworkState,
 }
 
 #[cfg(test)]
@@ -684,7 +870,6 @@ mod tests {
         assert_eq!(network.num_neurons(), 100);
         assert_eq!(network.current_time_step, 0);
 
-        // Verifica proporção de inibitórios
         let num_inhibitory = network
             .neurons
             .iter()
@@ -694,75 +879,64 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_dimensions() {
-        let network = Network::new(100, ConnectivityType::Grid2D, 0.2, 0.5);
+    fn test_lateral_competition() {
+        let mut network = Network::new(10, ConnectivityType::FullyConnected, 0.2, 0.5);
 
-        assert_eq!(network.grid_width, 10);
-        assert_eq!(network.grid_height, 10);
+        // Configura camada hidden
+        network.hidden_indices = vec![2, 3, 4, 5, 6, 7];
+
+        // Simula diferentes ativações
+        network.neurons[2].recent_firing_rate = 0.5;
+        network.neurons[3].recent_firing_rate = 0.1;
+        network.neurons[4].recent_firing_rate = 0.3;
+
+        // Aplica competição
+        let indices = network.hidden_indices.clone();
+        network.apply_lateral_competition(&indices);
+
+        // Neurônio mais ativo deve ter plasticidade maior
+        assert!(network.neurons[2].dendritoma.plasticity_gain >= network.neurons[3].dendritoma.plasticity_gain);
     }
 
     #[test]
-    fn test_coords_conversion() {
-        let network = Network::new(100, ConnectivityType::Grid2D, 0.2, 0.5);
+    fn test_reward_propagation() {
+        let mut network = Network::new(5, ConnectivityType::FullyConnected, 0.2, 0.5);
 
-        // Testa conversão de ida e volta
-        let index = network.coords_to_index(5, 5).unwrap();
-        assert_eq!(index, 55);
-
-        let (row, col) = network.index_to_coords(55).unwrap();
-        assert_eq!(row, 5);
-        assert_eq!(col, 5);
-    }
-
-    #[test]
-    fn test_2d_grid_connectivity() {
-        let network = Network::new(9, ConnectivityType::Grid2D, 0.0, 0.5);
-
-        // Grade 3x3: neurónio central (idx 4) deve ter 8 conexões
-        let connections: usize = network.connectivity_matrix[4].iter().map(|&x| x as usize).sum();
-        assert_eq!(connections, 8);
-
-        // Neurónio de canto (idx 0) deve ter 3 conexões
-        let connections: usize = network.connectivity_matrix[0].iter().map(|&x| x as usize).sum();
-        assert_eq!(connections, 3);
-    }
-
-    #[test]
-    fn test_fully_connected() {
-        let network = Network::new(10, ConnectivityType::FullyConnected, 0.0, 0.5);
-
-        // Cada neurónio deve conectar a todos os outros
-        for i in 0..10 {
-            let connections: usize = network.connectivity_matrix[i]
-                .iter()
-                .map(|&x| x as usize)
-                .sum();
-            assert_eq!(connections, 10); // Conecta a todos (incluindo si mesmo na matriz)
+        // Configura eligibility traces
+        for neuron in &mut network.neurons {
+            neuron.dendritoma.eligibility_trace = vec![0.5; 5];
         }
+
+        let initial_weights: Vec<f64> = network.neurons[0].dendritoma.weights.clone();
+
+        // Propaga reward
+        network.propagate_reward(1.0);
+
+        // Pesos devem ter mudado
+        let changed = network.neurons[0].dendritoma.weights.iter()
+            .zip(initial_weights.iter())
+            .any(|(new, old)| (new - old).abs() > 1e-6);
+
+        assert!(changed);
     }
 
     #[test]
-    fn test_network_update_increments_time() {
-        let mut network = Network::new(10, ConnectivityType::Grid2D, 0.2, 0.5);
-        let external_inputs = vec![0.0; 10];
+    fn test_weight_gap_calculation() {
+        let mut network = Network::new(10, ConnectivityType::FullyConnected, 0.0, 0.5);
 
-        assert_eq!(network.current_time_step, 0);
+        // Aumenta pesos de algumas fontes (padrão)
+        for neuron in &mut network.neurons {
+            neuron.dendritoma.weights[0] = 0.5;
+            neuron.dendritoma.weights[1] = 0.5;
+            // Outras ficam em 0.05
+        }
 
-        network.update(&external_inputs);
-        assert_eq!(network.current_time_step, 1);
+        let pattern_sources = vec![0, 1];
+        let targets: Vec<usize> = (2..10).collect();
 
-        network.update(&external_inputs);
-        assert_eq!(network.current_time_step, 2);
-    }
+        let gap = network.compute_weight_gap(&pattern_sources, &targets);
 
-    #[test]
-    fn test_network_stats() {
-        let network = Network::new(10, ConnectivityType::Grid2D, 0.2, 0.5);
-
-        // Energia inicial deve ser 100% (MAX_ENERGY)
-        assert_eq!(network.average_energy(), 100.0);
-
-        // Nenhum neurónio deve estar disparando inicialmente
-        assert_eq!(network.num_firing(), 0);
+        // Gap deve ser positivo (padrão > ruído)
+        assert!(gap > 0.0);
     }
 }

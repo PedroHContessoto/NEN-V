@@ -1,4 +1,4 @@
-//! AutoConfig v2.0: Configuração Autônoma da Rede Neural Biológica
+//! # AutoConfig v2.0: Configuração Autônoma da Rede Neural Biológica
 //!
 //! Filosofia: "Minimal Specification, Maximal Autonomy"
 //!
@@ -9,330 +9,71 @@
 //!
 //! A rede deriva automaticamente:
 //! - Arquitetura (hidden neurons, topologia, E/I ratio, threshold)
-//! - Todos os 60+ parâmetros (metabólicos, plasticidade, homeostase, memória)
+//! - Todos os 80+ parâmetros (metabólicos, plasticidade, homeostase, memória)
 //! - Ajustes adaptativos durante execução
+//!
+//! ## Estrutura do Módulo
+//!
+//! - `task`: Especificação da tarefa (TaskSpec, TaskType)
+//! - `architecture`: Derivação de arquitetura (DerivedArchitecture)
+//! - `params`: Parâmetros da rede (NetworkParams e sub-structs)
+//! - `derivation`: Funções de cálculo de parâmetros
+//! - `adaptive`: Sistema adaptativo runtime (AdaptiveState)
+//!
+//! ## Exemplo
+//!
+//! ```rust,ignore
+//! use nenv_v2::autoconfig::{AutoConfig, TaskSpec, TaskType, RewardDensity};
+//!
+//! let task = TaskSpec {
+//!     num_sensors: 8,
+//!     num_actuators: 4,
+//!     task_type: TaskType::ReinforcementLearning {
+//!         reward_density: RewardDensity::Auto,
+//!         temporal_horizon: Some(100),
+//!     },
+//! };
+//!
+//! let config = AutoConfig::from_task(task);
+//! config.print_report();
+//!
+//! let network = config.build_network().expect("Configuração válida");
+//! ```
 
+mod task;
 mod architecture;
 mod params;
-mod validation;
-pub mod adaptive;
+mod derivation;
+mod adaptive;
 
-pub use adaptive::*;
+// Re-exportações públicas
+pub use task::{TaskSpec, TaskType, RewardDensity};
+pub use architecture::DerivedArchitecture;
+pub use params::{
+    NetworkParams, EnergyParams, STDPParams, ISTDPParams, PlasticityParams,
+    HomeostaticParams, DerivedInputParams, MemoryParams, LTMProtectionParams,
+    NoveltyParams, SleepParams, RLParams, SpikeClassificationParams,
+    EligibilityParams, STPParams, CompetitionParams, WorkingMemoryParams,
+    CuriosityParams, RuntimeMetrics,
+};
+pub use adaptive::{AdaptiveState, AdaptiveStats, NetworkIssue, CorrectiveAction, SleepOutcome};
 
-use crate::network::{ConnectivityType, Network};
-
-// ============================================================================
-// STRUCTS PRINCIPAIS
-// ============================================================================
-
-/// Especificação mínima da tarefa (INPUT do usuário)
-#[derive(Debug, Clone)]
-pub struct TaskSpec {
-    /// Número de canais de entrada (sensores)
-    pub num_sensors: usize,
-
-    /// Número de canais de saída (atuadores)
-    pub num_actuators: usize,
-
-    /// Tipo de tarefa e características
-    pub task_type: TaskType,
-}
-
-/// Tipo de tarefa que a rede vai executar
-#[derive(Debug, Clone)]
-pub enum TaskType {
-    /// Aprendizado por reforço (navegação, controle motor)
-    ReinforcementLearning {
-        /// Densidade de recompensas esperada
-        reward_density: RewardDensity,
-
-        /// Horizonte temporal (steps até recompensa típica)
-        temporal_horizon: Option<usize>,
-    },
-
-    /// Classificação supervisionada (futuro)
-    SupervisedClassification {
-        num_classes: usize,
-    },
-
-    /// Memória associativa (futuro)
-    AssociativeMemory {
-        pattern_capacity: usize,
-    },
-}
-
-/// Densidade de recompensas no ambiente
-#[derive(Debug, Clone)]
-pub enum RewardDensity {
-    /// Rede mede automaticamente durante os primeiros N steps
-    Auto,
-
-    /// Recompensas densas (>10% dos steps têm reward)
-    Dense,
-
-    /// Recompensas moderadas (1-10% dos steps)
-    Moderate,
-
-    /// Recompensas esparsas (<1% dos steps)
-    Sparse,
-}
-
-// ============================================================================
-// AUTO-CONFIG (OUTPUT derivado)
-// ============================================================================
+use crate::network::{ConnectivityType, Network, LearningMode};
 
 /// Configuração completa derivada automaticamente
 #[derive(Debug, Clone)]
 pub struct AutoConfig {
-    /// Especificação original da tarefa
     pub task_spec: TaskSpec,
-
-    /// Arquitetura derivada
     pub architecture: DerivedArchitecture,
-
-    /// Todos os parâmetros da rede (60+ valores)
     pub params: NetworkParams,
-
-    /// Estado adaptativo (ajustado durante execução)
     pub runtime_metrics: RuntimeMetrics,
 }
 
-/// Arquitetura derivada automaticamente
-#[derive(Debug, Clone)]
-pub struct DerivedArchitecture {
-    /// Total de neurônios (sensores + hidden + atuadores)
-    pub total_neurons: usize,
-
-    /// Índices dos neurônios sensoriais [0, num_sensors)
-    pub sensor_indices: std::ops::Range<usize>,
-
-    /// Índices dos neurônios hidden [num_sensors, num_sensors+num_hidden)
-    pub hidden_indices: std::ops::Range<usize>,
-
-    /// Índices dos neurônios atuadores (motores)
-    pub actuator_indices: std::ops::Range<usize>,
-
-    /// Topologia de conectividade
-    pub connectivity: ConnectivityType,
-
-    /// Razão de neurônios inibitórios (0.0-1.0)
-    pub inhibitory_ratio: f64,
-
-    /// Threshold de disparo inicial
-    pub initial_threshold: f64,
-}
-
-/// Todos os parâmetros da rede
-#[derive(Debug, Clone)]
-pub struct NetworkParams {
-    // Estruturais
-    pub target_firing_rate: f64,
-    pub learning_rate: f64,
-    pub avg_connections: usize,
-    pub initial_excitatory_weight: f64,
-    pub initial_inhibitory_weight: f64,
-
-    // Metabólicos
-    pub energy: EnergyParams,
-
-    // Plasticidade
-    pub stdp: STDPParams,
-    pub istdp: iSTDPParams,
-    pub plasticity: PlasticityParams,
-
-    // Homeostase
-    pub homeostatic: HomeostaticParams,
-
-    // Input (derivado)
-    pub input: DerivedInputParams,
-
-    // Memória
-    pub memory: MemoryParams,
-
-    // Novidade/Alerta
-    pub novelty: NoveltyParams,
-
-    // Sono/Consolidação
-    pub sleep: SleepParams,
-
-    // RL-específico (se aplicável)
-    pub rl: Option<RLParams>,
-}
-
-/// Parâmetros de energia e metabolismo
-#[derive(Debug, Clone)]
-pub struct EnergyParams {
-    pub max_energy: f64,
-    pub energy_cost_fire: f64,
-    pub energy_cost_maintenance: f64,
-    pub energy_recovery_rate: f64,
-    pub plasticity_energy_cost_factor: f64,
-}
-
-/// Parâmetros de STDP (excitatório)
-#[derive(Debug, Clone)]
-pub struct STDPParams {
-    pub window: i64,
-    pub tau_plus: f64,
-    pub tau_minus: f64,
-    pub a_plus: f64,
-    pub a_minus: f64,
-}
-
-/// Parâmetros de iSTDP (inibitório)
-#[derive(Debug, Clone)]
-pub struct iSTDPParams {
-    pub learning_rate: f64,
-    pub target_rate: f64,
-}
-
-/// Parâmetros de plasticidade geral
-#[derive(Debug, Clone)]
-pub struct PlasticityParams {
-    pub base_gain: f64,
-    pub min_gain: f64,
-    pub energy_threshold_for_full_plasticity: f64,
-}
-
-/// Parâmetros homeostáticos
-#[derive(Debug, Clone)]
-pub struct HomeostaticParams {
-    pub refractory_period: i64,
-    pub memory_alpha: f64,
-    pub homeo_interval: i64,
-    pub homeo_eta: f64,
-    pub meta_threshold: f64,
-    pub meta_alpha: f64,
-    pub fr_alpha: f64,  // Alpha da EMA de firing rate
-}
-
-/// Parâmetros de entrada (input strength) derivados
-#[derive(Debug, Clone)]
-pub struct DerivedInputParams {
-    /// Densidade recomendada de input: % de neurônios estimulados por step
-    pub recommended_input_density: f64,
-
-    /// Amplitude recomendada do estímulo de entrada
-    pub recommended_input_amplitude: f64,
-}
-
-/// Parâmetros de memória (STM/LTM)
-#[derive(Debug, Clone)]
-pub struct MemoryParams {
-    pub weight_decay: f64,
-    pub weight_clamp: f64,
-    pub tag_decay_rate: f64,
-    pub tag_multiplier: f64,
-    pub capture_threshold: f64,
-    pub dopamine_sensitivity: f64,
-    pub consolidation_base_rate: f64,
-    pub ltm_protection: LTMProtectionParams,
-    pub spike_history_capacity: usize,
-}
-
-/// Parâmetros de proteção de LTM
-#[derive(Debug, Clone)]
-pub struct LTMProtectionParams {
-    pub stability_threshold: f64,
-    pub ltm_relevance_threshold: f64,
-    pub attraction_strength: f64,
-    pub small_change_threshold: f64,
-    pub stability_increment: f64,
-    pub stability_decay_factor: f64,
-    pub tag_consumption_factor: f64,
-}
-
-/// Parâmetros de novidade e alerta
-#[derive(Debug, Clone)]
-pub struct NoveltyParams {
-    pub alert_decay_rate: f64,
-    pub novelty_alert_threshold: f64,
-    pub alert_sensitivity: f64,
-    pub sleep_alert_level: f64,
-    pub initial_priority: f64,
-}
-
-/// Parâmetros de sono e consolidação
-#[derive(Debug, Clone)]
-pub struct SleepParams {
-    pub sleep_interval: u64,
-    pub sleep_duration: usize,
-    pub sleep_replay_noise: f64,
-    pub min_selectivity_to_sleep: f64,
-    pub sleep_learning_rate_factor: f64,
-    pub sleep_metabolic_factor: f64,
-}
-
-/// Parâmetros específicos de Reinforcement Learning
-#[derive(Debug, Clone)]
-pub struct RLParams {
-    pub initial_exploration_rate: f64,
-    pub exploration_decay_rate: f64,
-    pub eligibility_trace_window: i64,
-    pub spike_classification: SpikeClassificationParams,
-}
-
-/// Parâmetros de classificação de spikes (SpikeOrigin)
-#[derive(Debug, Clone)]
-pub struct SpikeClassificationParams {
-    pub feedback_excess_factor: f64,
-}
-
-/// Métricas runtime (atualizado durante execução)
-#[derive(Debug, Clone)]
-pub struct RuntimeMetrics {
-    /// Densidade de reward medida (RL)
-    pub measured_reward_density: f64,
-
-    /// Horizonte temporal médio (steps até reward)
-    pub measured_temporal_horizon: f64,
-
-    /// Taxa de novidade média do ambiente
-    pub measured_novelty_rate: f64,
-
-    /// Energia média da rede
-    pub measured_avg_energy: f64,
-
-    /// Erro de firing rate (real - alvo)
-    pub measured_fr_error: f64,
-
-    /// Contador de episódios/sucessos
-    pub episode_count: usize,
-
-    /// Número de steps executados
-    pub steps_executed: u64,
-}
-
-// ============================================================================
-// IMPLEMENTAÇÃO PRINCIPAL
-// ============================================================================
-
 impl AutoConfig {
-    /// Cria configuração completa a partir de especificação mínima da tarefa
-    ///
-    /// # Exemplo
-    /// ```
-    /// use nenv_visual_sim::autoconfig::*;
-    ///
-    /// let task = TaskSpec {
-    ///     num_sensors: 4,
-    ///     num_actuators: 4,
-    ///     task_type: TaskType::ReinforcementLearning {
-    ///         reward_density: RewardDensity::Auto,
-    ///         temporal_horizon: None,
-    ///     },
-    /// };
-    ///
-    /// let config = AutoConfig::from_task(task);
-    /// ```
+    /// Cria configuração a partir da especificação da tarefa
     pub fn from_task(task_spec: TaskSpec) -> Self {
-        // NÍVEL 0: Deriva arquitetura
         let architecture = DerivedArchitecture::from_task(&task_spec);
-
-        // NÍVEL 1-5: Calcula todos os parâmetros
         let params = NetworkParams::from_architecture(&architecture, &task_spec);
-
-        // Métricas runtime iniciais
         let runtime_metrics = RuntimeMetrics::default();
 
         AutoConfig {
@@ -345,12 +86,10 @@ impl AutoConfig {
 
     /// Cria a rede neural configurada
     pub fn build_network(&self) -> Result<Network, String> {
-        // Valida configuração
         if let Err(errors) = self.validate() {
             return Err(errors.join("\n"));
         }
 
-        // Cria a rede usando os parâmetros derivados
         let arch = &self.architecture;
         let params = &self.params;
 
@@ -361,12 +100,24 @@ impl AutoConfig {
             arch.initial_threshold,
         );
 
-        // Configura modo de aprendizado (sempre STDP para AutoConfig)
-        network.set_learning_mode(crate::network::LearningMode::STDP);
+        // Configura modo de aprendizado
+        network.set_learning_mode(LearningMode::STDP);
 
-        // Aplica todos os parâmetros derivados aos neurônios
+        // Configura índices de camadas
+        network.set_layer_indices(
+            arch.sensor_indices.clone().collect(),
+            arch.hidden_indices.clone().collect(),
+            arch.actuator_indices.clone().collect(),
+        );
+
+        // Configura competição lateral
+        network.lateral_competition_enabled = params.competition.enabled;
+        network.competition_strength = params.competition.strength;
+        network.competition_interval = params.competition.interval;
+
+        // Aplica parâmetros aos neurônios
         for neuron in &mut network.neurons {
-            // Parâmetros homeostáticos
+            // Homeostase
             neuron.target_firing_rate = params.target_firing_rate;
             neuron.homeo_eta = params.homeostatic.homeo_eta;
             neuron.homeo_interval = params.homeostatic.homeo_interval;
@@ -374,11 +125,10 @@ impl AutoConfig {
             neuron.set_memory_alpha(params.homeostatic.memory_alpha);
             neuron.meta_threshold = params.homeostatic.meta_threshold;
             neuron.meta_alpha = params.homeostatic.meta_alpha;
-            // Ajusta proporção peso/threshold com base no grid atual (W65T35)
             neuron.homeo_weight_ratio = 0.650;
             neuron.homeo_threshold_ratio = 0.350;
 
-            // Parâmetros do dendritoma
+            // Dendritoma
             neuron.dendritoma.set_learning_rate(params.learning_rate);
             neuron.dendritoma.set_stdp_params(
                 params.stdp.a_plus,
@@ -394,18 +144,29 @@ impl AutoConfig {
             neuron.dendritoma.capture_threshold = params.memory.capture_threshold;
             neuron.dendritoma.dopamine_sensitivity = params.memory.dopamine_sensitivity;
 
-            // Parâmetros de energia (glia)
+            // Eligibility Traces (v2.0)
+            neuron.dendritoma.trace_tau = params.eligibility.trace_tau;
+            neuron.dendritoma.trace_increment = params.eligibility.trace_increment;
+
+            // STP (v2.0)
+            neuron.dendritoma.stp_recovery_tau = params.stp.recovery_tau;
+            neuron.dendritoma.stp_use_fraction = params.stp.use_fraction;
+
+            // Competição
+            neuron.dendritoma.competitive_normalization_enabled = params.competition.enabled;
+
+            // Energia
             neuron.glia.max_energy = params.energy.max_energy;
-            neuron.glia.energy = params.energy.max_energy; // Inicia com energia cheia
+            neuron.glia.energy = params.energy.max_energy;
             neuron.glia.energy_cost_fire = params.energy.energy_cost_fire;
             neuron.glia.energy_cost_maintenance = params.energy.energy_cost_maintenance;
             neuron.glia.energy_recovery_rate = params.energy.energy_recovery_rate;
 
-            // Parâmetros de novidade/alerta
+            // Novidade
             neuron.glia.priority = params.novelty.initial_priority;
         }
 
-        // Configura parâmetros da rede
+        // Parâmetros da rede
         network.stdp_window = params.stdp.window;
         network.sleep_learning_rate_factor = params.sleep.sleep_learning_rate_factor;
         network.set_novelty_alert_params(
@@ -414,13 +175,13 @@ impl AutoConfig {
         );
         network.alert_decay_rate = params.novelty.alert_decay_rate;
 
-        // Inicializa pesos baseado nos parâmetros derivados
+        // Inicializa pesos
         self.initialize_weights(&mut network);
 
         Ok(network)
     }
 
-    /// Inicializa os pesos da rede baseado nos parâmetros do AutoConfig
+    /// Inicializa pesos da rede
     fn initialize_weights(&self, network: &mut Network) {
         use rand::Rng;
         let mut rng = rand::thread_rng();
@@ -430,7 +191,7 @@ impl AutoConfig {
             .floor() as usize;
 
         for (i, neuron) in network.neurons.iter_mut().enumerate() {
-            // Inicializa pesos excitatórios com pequena variação aleatória
+            // Pesos excitatórios
             for w in &mut neuron.dendritoma.weights {
                 *w = rng.gen_range(
                     self.params.initial_excitatory_weight * 0.8
@@ -438,11 +199,10 @@ impl AutoConfig {
                 );
             }
 
-            // Inicializa pesos inibitórios
+            // Pesos inibitórios
             for source_id in 0..self.architecture.total_neurons {
                 if source_id < neuron.dendritoma.weights.len() {
                     if network.connectivity_matrix[i][source_id] == 1 {
-                        // Se fonte é inibitória e não é auto-conexão
                         if source_id < num_inhibitory && source_id != i {
                             neuron.dendritoma.weights[source_id] =
                                 self.params.initial_inhibitory_weight;
@@ -453,29 +213,128 @@ impl AutoConfig {
         }
     }
 
-    /// Imprime relatório detalhado da configuração
+    /// Valida a configuração
+    pub fn validate(&self) -> Result<(), Vec<String>> {
+        let mut errors = Vec::new();
+
+        // Validação da arquitetura
+        if self.architecture.total_neurons < 3 {
+            errors.push("Rede muito pequena (mínimo 3 neurônios)".to_string());
+        }
+
+        if self.architecture.inhibitory_ratio < 0.0 || self.architecture.inhibitory_ratio > 1.0 {
+            errors.push("Razão inibitória deve estar entre 0.0 e 1.0".to_string());
+        }
+
+        if self.architecture.initial_threshold <= 0.0 {
+            errors.push("Threshold inicial deve ser positivo".to_string());
+        }
+
+        // Validação de energia
+        let avg_cost = self.params.energy.energy_cost_fire * self.params.target_firing_rate;
+        let avg_gain = self.params.energy.energy_recovery_rate * (1.0 - self.params.target_firing_rate);
+        if avg_gain <= avg_cost {
+            errors.push(format!(
+                "Balanço energético negativo: ganho={:.3}, custo={:.3}",
+                avg_gain, avg_cost
+            ));
+        }
+
+        // Validação STDP
+        if self.params.stdp.tau_plus <= 0.0 || self.params.stdp.tau_minus <= 0.0 {
+            errors.push("Constantes de tempo STDP devem ser positivas".to_string());
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
+
+    /// Imprime relatório completo
     pub fn print_report(&self) {
-        println!("╔════════════════════════════════════════╗");
-        println!("║  CONFIGURAÇÃO AUTÔNOMA NEN-V v2.0     ║");
-        println!("╚════════════════════════════════════════╝\n");
+        println!("╔═════════════════════════════════════════╗");
+        println!("║    CONFIGURAÇÃO AUTÔNOMA NEN-V v2.0     ║");
+        println!("╚═════════════════════════════════════════╝\n");
 
         self.print_task_spec();
         self.print_architecture();
         self.print_parameters();
         self.print_verification();
     }
-}
 
-impl Default for RuntimeMetrics {
-    fn default() -> Self {
-        Self {
-            measured_reward_density: 0.0,
-            measured_temporal_horizon: 0.0,
-            measured_novelty_rate: 0.0,
-            measured_avg_energy: 100.0,
-            measured_fr_error: 0.0,
-            episode_count: 0,
-            steps_executed: 0,
+    fn print_task_spec(&self) {
+        println!("┌─────────────────────────────────────────┐");
+        println!("│ ESPECIFICAÇÃO DA TAREFA                 │");
+        println!("├─────────────────────────────────────────┤");
+        println!("│ Sensores:   {:>27} │", self.task_spec.num_sensors);
+        println!("│ Atuadores:  {:>27} │", self.task_spec.num_actuators);
+        println!("│ Tipo:       {:>27} │", self.task_type_str());
+        println!("└─────────────────────────────────────────┘\n");
+    }
+
+    fn print_architecture(&self) {
+        let arch = &self.architecture;
+        println!("┌─────────────────────────────────────────┐");
+        println!("│ ARQUITETURA DERIVADA                    │");
+        println!("├─────────────────────────────────────────┤");
+        println!("│ Total neurônios:    {:>19} │", arch.total_neurons);
+        println!("│ Camada hidden:      {:>19} │", arch.hidden_indices.len());
+        println!("│ Razão inibitória:   {:>18.1}% │", arch.inhibitory_ratio * 100.0);
+        println!("│ Threshold inicial:  {:>19.3} │", arch.initial_threshold);
+        println!("│ Conectividade:      {:>19} │", self.connectivity_str());
+        println!("└─────────────────────────────────────────┘\n");
+    }
+
+    fn print_parameters(&self) {
+        let params = &self.params;
+        println!("┌─────────────────────────────────────────┐");
+        println!("│ PARÂMETROS PRINCIPAIS                   │");
+        println!("├─────────────────────────────────────────┤");
+        println!("│ Target FR:          {:>18.2}% │", params.target_firing_rate * 100.0);
+        println!("│ Learning rate:      {:>19.4} │", params.learning_rate);
+        println!("│ STDP window:        {:>19} │", params.stdp.window);
+        println!("│ STDP tau+/tau-:     {:>9.1}/{:<8.1} │", params.stdp.tau_plus, params.stdp.tau_minus);
+        println!("│ Eligibility tau:    {:>19.1} │", params.eligibility.trace_tau);
+        println!("│ STP recovery:       {:>19.1} │", params.stp.recovery_tau);
+        println!("│ Competition:        {:>19.2} │", params.competition.strength);
+        println!("│ WM capacity:        {:>19} │", params.working_memory.capacity);
+        println!("│ Curiosity scale:    {:>19.2} │", params.curiosity.curiosity_scale);
+        println!("└─────────────────────────────────────────┘\n");
+    }
+
+    fn print_verification(&self) {
+        let energy = &self.params.energy;
+        let avg_cost = energy.energy_cost_fire * self.params.target_firing_rate;
+        let avg_gain = energy.energy_recovery_rate * (1.0 - self.params.target_firing_rate);
+        let balance = avg_gain - avg_cost;
+
+        println!("┌─────────────────────────────────────────┐");
+        println!("│ VERIFICAÇÃO                             │");
+        println!("├─────────────────────────────────────────┤");
+        println!("│ Balanço energético: {:>+18.3} │", balance);
+        println!("│ LTP/LTD ratio:      {:>19.2} │", self.params.stdp.a_plus / self.params.stdp.a_minus);
+        println!("│ Capacidade memória: {:>19} │", self.architecture.estimate_memory_capacity());
+
+        let status = if balance > 0.0 { "✓ OK" } else { "✗ ERRO" };
+        println!("│ Status:             {:>19} │", status);
+        println!("└─────────────────────────────────────────┘\n");
+    }
+
+    fn task_type_str(&self) -> &str {
+        match &self.task_spec.task_type {
+            TaskType::ReinforcementLearning { .. } => "RL",
+            TaskType::SupervisedClassification { .. } => "Classificação",
+            TaskType::AssociativeMemory { .. } => "Memória",
+        }
+    }
+
+    fn connectivity_str(&self) -> &str {
+        match self.architecture.connectivity {
+            ConnectivityType::FullyConnected => "FullyConnected",
+            ConnectivityType::Grid2D => "Grid2D",
+            ConnectivityType::Isolated => "Isolated",
         }
     }
 }
@@ -488,31 +347,139 @@ impl Default for RuntimeMetrics {
 mod tests {
     use super::*;
 
+    fn rl_task() -> TaskType {
+        TaskType::ReinforcementLearning {
+            reward_density: RewardDensity::Auto,
+            temporal_horizon: None,
+        }
+    }
+
     #[test]
-    fn test_from_task_basic() {
+    fn test_autoconfig_creation() {
         let task = TaskSpec {
             num_sensors: 4,
             num_actuators: 4,
-            task_type: TaskType::ReinforcementLearning {
-                reward_density: RewardDensity::Auto,
-                temporal_horizon: None,
-            },
+            task_type: rl_task(),
         };
 
         let config = AutoConfig::from_task(task);
 
-        // Verifica que arquitetura foi derivada
         assert!(config.architecture.total_neurons > 8);
         assert_eq!(config.architecture.sensor_indices.len(), 4);
         assert_eq!(config.architecture.actuator_indices.len(), 4);
     }
 
     #[test]
-    fn test_adaptive_state_default() {
-        let state = AdaptiveState::default();
+    fn test_validation_passes() {
+        let task = TaskSpec {
+            num_sensors: 4,
+            num_actuators: 4,
+            task_type: rl_task(),
+        };
 
-        assert_eq!(state.measured_reward_density, 0.0);
-        assert_eq!(state.measured_avg_energy, 100.0);
-        assert_eq!(state.episode_count, 0);
+        let config = AutoConfig::from_task(task);
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_network_building() {
+        let task = TaskSpec {
+            num_sensors: 4,
+            num_actuators: 4,
+            task_type: rl_task(),
+        };
+
+        let config = AutoConfig::from_task(task);
+        let network = config.build_network();
+
+        assert!(network.is_ok());
+        let net = network.unwrap();
+        assert_eq!(net.num_neurons(), config.architecture.total_neurons);
+    }
+
+    #[test]
+    fn test_eligibility_params() {
+        let task = TaskSpec {
+            num_sensors: 4,
+            num_actuators: 4,
+            task_type: TaskType::ReinforcementLearning {
+                reward_density: RewardDensity::Sparse,
+                temporal_horizon: Some(100),
+            },
+        };
+
+        let config = AutoConfig::from_task(task);
+
+        assert!(config.params.eligibility.enabled);
+        assert!(config.params.eligibility.trace_tau > 100.0);
+    }
+
+    #[test]
+    fn test_asymmetric_stdp() {
+        let task = TaskSpec {
+            num_sensors: 4,
+            num_actuators: 4,
+            task_type: rl_task(),
+        };
+
+        let config = AutoConfig::from_task(task);
+
+        // tau_plus > tau_minus
+        assert!(config.params.stdp.tau_plus > config.params.stdp.tau_minus);
+
+        // LTP > LTD
+        assert!(config.params.stdp.a_plus > config.params.stdp.a_minus);
+    }
+
+    #[test]
+    fn test_working_memory_params() {
+        let task = TaskSpec {
+            num_sensors: 4,
+            num_actuators: 4,
+            task_type: rl_task(),
+        };
+
+        let config = AutoConfig::from_task(task);
+
+        assert!(config.params.working_memory.enabled);
+        assert!(config.params.working_memory.capacity >= 5);
+    }
+
+    #[test]
+    fn test_curiosity_params() {
+        let task = TaskSpec {
+            num_sensors: 4,
+            num_actuators: 4,
+            task_type: TaskType::ReinforcementLearning {
+                reward_density: RewardDensity::Sparse,
+                temporal_horizon: None,
+            },
+        };
+
+        let config = AutoConfig::from_task(task);
+
+        assert!(config.params.curiosity.enabled);
+        assert!(config.params.curiosity.curiosity_scale > 0.1);
+    }
+
+    #[test]
+    fn test_adaptive_state() {
+        let task = TaskSpec {
+            num_sensors: 4,
+            num_actuators: 4,
+            task_type: rl_task(),
+        };
+
+        let config = AutoConfig::from_task(task);
+        let mut state = AdaptiveState::new(config);
+
+        // Registra métricas
+        for _ in 0..100 {
+            state.record_metrics(0.1, 80.0, Some(0.5));
+        }
+
+        let stats = state.get_stats();
+        assert!(stats.avg_firing_rate > 0.0);
+        assert!(stats.avg_energy > 0.0);
     }
 }

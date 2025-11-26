@@ -31,8 +31,8 @@ pub enum SpikeOrigin {
     /// Usados para treinar padrões específicos via STDP
     Exogenous,
 
-    /// Spike de feedback: causado por recorrência na rede
-    /// NÃO devem participar de STDP para evitar runaway LTP
+    /// Spike de feedback: causado por recorrÃªncia na rede
+    /// NÃƒO devem participar de STDP para evitar runaway LTP
     Feedback,
 
     /// Nenhum spike ocorreu
@@ -67,10 +67,10 @@ pub struct NENV {
     /// Limiar de disparo
     pub threshold: f64,
 
-    /// Limiar de disparo inicial (referência para clamps adaptativos)
+    /// Limiar de disparo inicial (referÃªncia para clamps adaptativos)
     base_threshold: f64,
 
-    /// Contador de overshoot para modular piso dinâmico
+    /// Contador de overshoot para modular piso dinÃ¢mico
     overshoot_count: f64,
 
     /// Estado de disparo atual
@@ -83,7 +83,7 @@ pub struct NENV {
     /// Sinal de saída (+1.0 para excitatório, -1.0 para inibitório, 0.0 se não disparou)
     pub output_signal: f64,
 
-    // Parâmetros de dinâmica
+    // ParÃ¢metros de dinÃ¢mica
     refractory_period: i64,
     memory_alpha: f64,
 
@@ -95,7 +95,7 @@ pub struct NENV {
     /// Preserva a atividade durante vigília para replay mais preciso
     pub saved_awake_activity: f64,
 
-    // Parâmetros de plasticidade homeostática
+    // ParÃ¢metros de plasticidade homeostática
     /// Taxa de disparo alvo para homeostase (default: 0.1 = 10% de atividade)
     pub target_firing_rate: f64,
 
@@ -105,7 +105,7 @@ pub struct NENV {
     /// Intervalo entre aplicações de homeostase (em passos)
     pub homeo_interval: i64,
 
-    /// Último passo em que homeostase foi aplicada
+    /// Ãšltimo passo em que homeostase foi aplicada
     last_homeo_update: i64,
 
     /// Proporção do esforço homeostático em ajuste de pesos (0.0-1.0)
@@ -117,8 +117,8 @@ pub struct NENV {
     /// Nota: weight_ratio + threshold_ratio devem somar 1.0
     pub homeo_threshold_ratio: f64,
 
-    // Parâmetros de metaplasticidade BCM
-    /// Limiar metaplástico dinâmico (θ_M na teoria BCM)
+    // ParÃ¢metros de metaplasticidade BCM
+    /// Limiar metaplástico dinÃ¢mico (Î¸_M na teoria BCM)
     /// Ajusta-se baseado na atividade quadrática média
     pub meta_threshold: f64,
 
@@ -160,7 +160,7 @@ impl NENV {
             recent_firing_rate: 0.0,
             saved_awake_activity: 0.0,
             target_firing_rate: 0.15,  // Será sobrescrito pelo AutoConfig
-            // Parâmetros homeostáticos ajustados via grid-search (W65T35_eta3.3x_int0.858x)
+            // ParÃ¢metros homeostáticos ajustados via grid-search (W65T35_eta3.3x_int0.858x)
             homeo_eta: 0.1627,     // 0.05 * 3.253 (grid)
             homeo_interval: 9,     // 10 * 0.858 (grid, arredondado)
             last_homeo_update: -1,
@@ -202,7 +202,7 @@ impl NENV {
         self.output_signal = 0.0;
 
         // SPARSE CODING: Adaptive threshold aumenta com firing rate
-        // Se neurônio dispara muito → threshold sobe → mais difícil disparar
+        // Se neurônio dispara muito â†’ threshold sobe â†’ mais difícil disparar
         let adaptive_threshold = self.threshold * (1.0 + self.recent_firing_rate * 3.0);
 
         // HARD ENERGY GATING: Só dispara se tem energia mínima
@@ -220,21 +220,21 @@ impl NENV {
             }
 
             // Determina a origem do spike (STDP gated / 3-factor)
-            // Regra: Se há input externo direto → Exogenous
-            //        Se não → pode ser Endogenous (genuíno) ou Feedback (recorrente)
+            // Regra: Se há input externo direto â†’ Exogenous
+            //        Se não â†’ pode ser Endogenous (genuíno) ou Feedback (recorrente)
             //        Para distinguir Endogenous de Feedback, verificamos se o potencial
             //        é muito maior que o threshold (indica feedback intenso)
             if has_external_input {
                 self.spike_origin = SpikeOrigin::Exogenous;
             } else {
                 // Heurística: potencial >> threshold sugere feedback recorrente
-                // Se potencial é apenas ligeiramente acima do threshold → Endogenous
+                // Se potencial é apenas ligeiramente acima do threshold â†’ Endogenous
                 let excess = modulated_potential - self.threshold;
                 if excess > self.threshold * 2.0 {
-                    // Potencial muito alto → provavelmente feedback recorrente
+                    // Potencial muito alto â†’ provavelmente feedback recorrente
                     self.spike_origin = SpikeOrigin::Feedback;
                 } else {
-                    // Potencial moderado → disparo genuíno/endógeno
+                    // Potencial moderado â†’ disparo genuíno/endógeno
                     self.spike_origin = SpikeOrigin::Endogenous;
                 }
             }
@@ -285,7 +285,7 @@ impl NENV {
     /// * `inputs` - Vetor de sinais de entrada atual
     ///
     /// # Retorna
-    /// Valor de novidade [0.0, ∞), onde 0 = completamente familiar
+    /// Valor de novidade [0.0, âˆž), onde 0 = completamente familiar
     pub fn compute_novelty(&self, inputs: &[f64]) -> f64 {
         assert_eq!(
             inputs.len(),
@@ -315,7 +315,7 @@ impl NENV {
     /// * `novelty` - Valor de novidade calculado
     /// * `sensitivity_factor` - Multiplicador de sensibilidade (padrão: 1.0)
     pub fn update_priority(&mut self, novelty: f64, sensitivity_factor: f64) {
-        // Priority base é 1.0, aumenta proporcionalmente à novidade
+        // Priority base é 1.0, aumenta proporcionalmente Ã  novidade
         self.glia.priority = 1.0 + novelty * sensitivity_factor;
 
         // Limita priority a um máximo razoável para evitar instabilidade
@@ -324,9 +324,9 @@ impl NENV {
 
     /// Calcula o ganho de plasticidade baseado na energia disponível
     ///
-    /// Implementa energy-gated learning: neurônios com baixa energia têm
+    /// Implementa energy-gated learning: neurônios com baixa energia tÃªm
     /// plasticidade fortemente reduzida, enquanto neurônios com alta energia
-    /// mantêm plasticidade plena.
+    /// mantÃªm plasticidade plena.
     ///
     /// CORRIGIDO: Modulação mais forte e gradual
     /// Fórmula: gain = (e^2) para e < 0.5, depois suaviza para e > 0.5
@@ -345,13 +345,13 @@ impl NENV {
 
         if e < 0.5 {
             // Região crítica: penalização quadrática
-            // e=0.1 → gain=0.01 (1%)
-            // e=0.2 → gain=0.04 (4%)
-            // e=0.3 → gain=0.09 (9%)
-            // e=0.4 → gain=0.16 (16%)
+            // e=0.1 â†’ gain=0.01 (1%)
+            // e=0.2 â†’ gain=0.04 (4%)
+            // e=0.3 â†’ gain=0.09 (9%)
+            // e=0.4 â†’ gain=0.16 (16%)
             e * e
         } else {
-            // Região estável: aprendizado pleno (≥50% energia)
+            // Região estável: aprendizado pleno (â‰¥50% energia)
             // Transição suave para 100%
             0.25 + 1.5 * (e - 0.5)
         }
@@ -365,7 +365,7 @@ impl NENV {
     /// tornando-se mais seletivos; neurônios pouco ativos diminuem o limiar,
     /// tornando-se mais sensíveis.
     ///
-    /// θ_M = (1-α) × θ_M + α × y²
+    /// Î¸_M = (1-Î±) Ã— Î¸_M + Î± Ã— y²
     ///
     /// # Argumentos
     /// * `fired` - Se o neurônio disparou neste passo
@@ -381,8 +381,8 @@ impl NENV {
     /// Calcula o ganho de plasticidade BCM
     ///
     /// Modula a plasticidade baseado na relação entre atividade recente
-    /// e o limiar metaplástico. Neurônios muito acima do limiar têm
-    /// plasticidade reduzida (evita saturação), neurônios abaixo têm
+    /// e o limiar metaplástico. Neurônios muito acima do limiar tÃªm
+    /// plasticidade reduzida (evita saturação), neurônios abaixo tÃªm
     /// plasticidade aumentada (facilita aprendizado).
     ///
     /// # Retorna
@@ -394,14 +394,14 @@ impl NENV {
         // Diferença entre atividade e limiar
         let diff = y_bar - theta;
 
-        // Ganho modulado: atividade alta → ganho menor
+        // Ganho modulado: atividade alta â†’ ganho menor
         // Limites conservadores para não quebrar STDP
         (1.0 - 0.5 * diff).clamp(0.5, 1.5)
     }
 
     /// Aplica plasticidade homeostática periodicamente
     ///
-    /// Implementa DOIS mecanismos biológicos simultâneos:
+    /// Implementa DOIS mecanismos biológicos simultÃ¢neos:
     /// 1. Synaptic Scaling (Peso): Ajusta "volume" das entradas
     /// 2. Intrinsic Plasticity (Threshold): Ajusta "sensibilidade" do neurônio
     ///
@@ -415,7 +415,7 @@ impl NENV {
         }
         self.last_homeo_update = current_time;
 
-        // 🔥 CORREÇÃO: Permite homeostase mesmo sem input externo se FR for 0
+        // ðŸ”¥ CORREÃ‡ÃƒO: Permite homeostase mesmo sem input externo se FR for 0
         // (Neurônios "mortos" precisam baixar threshold para procurar sinal)
         if !has_external_input && self.recent_firing_rate > 0.01 {
             return;
@@ -438,10 +438,10 @@ impl NENV {
         // Ajusta os pesos para tentar compensar o erro
         self.dendritoma.apply_synaptic_scaling(effective_error, self.homeo_eta * self.homeo_weight_ratio);
 
-        // ✨ MECANISMO 2: Intrinsic Plasticity (proporção configurável do esforço homeostático) ✨
+        // âœ¨ MECANISMO 2: Intrinsic Plasticity (proporção configurável do esforço homeostático) âœ¨
         // Ajusta o threshold.
-        // Se rate_error < 0 (hipoativo) → threshold DEVE CAIR (ficar mais sensível)
-        // Se rate_error > 0 (hiperativo) → threshold DEVE SUBIR (ficar menos sensível)
+        // Se rate_error < 0 (hipoativo) â†’ threshold DEVE CAIR (ficar mais sensível)
+        // Se rate_error > 0 (hiperativo) â†’ threshold DEVE SUBIR (ficar menos sensível)
         let threshold_delta = effective_error * self.homeo_eta * self.homeo_threshold_ratio;
 
         self.threshold += threshold_delta;
@@ -481,7 +481,7 @@ impl NENV {
         let modulated_potential = self.glia.modulate(integrated_potential);
 
         // Determina se há input externo direto (para STDP gated)
-        // Input externo = qualquer elemento > threshold de significância (0.5)
+        // Input externo = qualquer elemento > threshold de significÃ¢ncia (0.5)
         let has_external_input = inputs.iter().any(|&inp| inp > 0.5);
 
         // Fase 3: Decisão de disparo
@@ -509,7 +509,7 @@ impl NENV {
                 .map(|(w_new, w_old)| (w_new - w_old).abs())
                 .sum();
 
-            // Aprendizado consome energia proporcional às mudanças
+            // Aprendizado consome energia proporcional Ã s mudanças
             self.glia.consume_plasticity_energy(plasticity_cost);
         }
 
@@ -531,8 +531,8 @@ impl NENV {
         self.output_signal
     }
 
-    /// Útil para debugging e visualização
-    pub fn get_modulated_potential(&self, inputs: &[f64]) -> f64 {
+    /// Ãštil para debugging e visualização
+    pub fn get_modulated_potential(&mut self, inputs: &[f64]) -> f64 {
         let integrated = self.dendritoma.integrate(inputs);
         self.glia.modulate(integrated)
     }
@@ -564,7 +564,7 @@ impl NENV {
         }
     }
 
-    /// Retorna uma referência ao histórico de spikes (para análise)
+    /// Retorna uma referÃªncia ao histórico de spikes (para análise)
     pub fn spike_history(&self) -> &VecDeque<i64> {
         &self.spike_history
     }
@@ -609,7 +609,7 @@ mod tests {
 
         let inputs = vec![1.0, 1.0];
         let potential = neuron.get_modulated_potential(&inputs);
-        neuron.decide_to_fire(potential, 0);
+        neuron.decide_to_fire(potential, 0, false);
 
         assert!(neuron.is_firing);
         assert_eq!(neuron.output_signal, 1.0);
@@ -713,7 +713,7 @@ mod tests {
         // Define memória como um padrão específico
         neuron.memory_trace = vec![0.5, 0.3, 0.2];
 
-        // Input idêntico à memória
+        // Input idÃªntico Ã  memória
         let inputs = vec![0.5, 0.3, 0.2];
         let novelty = neuron.compute_novelty(&inputs);
 

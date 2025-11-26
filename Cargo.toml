@@ -1,64 +1,52 @@
 [package]
-name = "nenv_visual_sim"
-version = "0.1.0"
+name = "nenv_v2"
+version = "2.0.0"
 edition = "2021"
-authors = ["Pedro H. Contessoto"]
-description = "Biologically-inspired neural network with STDP, homeostasis, and sleep-based memory consolidation"
+authors = ["NEN-V Team"]
+description = "Neuromorphic Energy-based Neural Virtual Model - Biologically plausible neural network with STDP, homeostasis, working memory, predictive coding, and intrinsic motivation"
 license = "MIT"
+readme = "README.md"
+keywords = ["neural-network", "neuromorphic", "stdp", "spiking", "biologically-plausible"]
+categories = ["science", "simulation"]
 
 [lib]
-name = "nenv_visual_sim"
+name = "nenv_v2"
 path = "src/lib.rs"
 
-# Simulação GridWorld com aprendizado sensorimotor
-[[bin]]
-name = "gridworld_sensorimotor"
-path = "simulations/gridworld_sensorimotor/main.rs"
-
-[[bin]]
-name = "adaptive_learning"
-path = "simulations/adaptive_learning/main.rs"
-
-# Experimento A: Controle homeostático puro (sem RL/sono)
-[[bin]]
-name = "experiment_a_fr_control"
-path = "simulations/adaptive_learning/experiment_a_fr_control.rs"
-
-# Experimento A-Prime: Auto-regulação homeostática PURA (sem PI)
-[[bin]]
-name = "experiment_a_prime_pure_homeostasis"
-path = "simulations/adaptive_learning/experiment_a_prime_pure_homeostasis.rs"
-
-# Grid Search: Encontra sweet spot dos parâmetros homeostáticos
-[[bin]]
-name = "homeostasis_grid_search"
-path = "simulations/adaptive_learning/homeostasis_grid_search.rs"
-
-# Grid Search: Encontra sweet spot dos parâmetros homeostáticos loop
-[[bin]]
-name = "homeostasis_grid_search_loop"
-path = "simulations/adaptive_learning/homeostasis_grid_search_loop.rs"
-
-# Experimento C: Validação de aprendizado e estabilidade
-[[bin]]
-name = "experiment_c_learning"
-path = "simulations/adaptive_learning/experiment_c_learning.rs"
-
-# Grid search para o Experimento C
-[[bin]]
-name = "experiment_c_grid_search"
-path = "simulations/adaptive_learning/experiment_c_grid_search.rs"
-
-# Deep Diagnostic: Análise ultra-detalhada de todas as métricas
-[[bin]]
-name = "deep_diagnostic"
-path = "simulations/adaptive_learning/deep_diagnostic.rs"
-
 [dependencies]
-macroquad = "0.4"
 rand = "0.8"
-rand_distr = "0.4"
+approx = "0.5"
+
+[dev-dependencies]
+approx = "0.5"
+
+[features]
+default = []
+full = []
+
+[[example]]
+name = "basic_network"
+path = "examples/basic_network.rs"
+
+[[example]]
+name = "rl_agent"
+path = "examples/rl_agent.rs"
+
+[[example]]
+name = "curiosity_exploration"
+path = "examples/curiosity_exploration.rs"
+
+[[bin]]
+name = "realtime_sim"
+path = "simulations/realtime_environment/main.rs"
+
+[[bin]]
+name = "hyperopt"
+path = "experiments/hyperparameter_search/main.rs"
 
 [profile.release]
 opt-level = 3
 lto = true
+
+[profile.dev]
+opt-level = 1

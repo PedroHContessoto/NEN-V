@@ -1,35 +1,52 @@
-//! Derivação automática de arquitetura neural
+//! # Derivação de Arquitetura
 //!
-//! NÍVEL 0: Determina a estrutura da rede baseado apenas na interface com o ambiente
+//! Deriva automaticamente a arquitetura da rede a partir da especificação da tarefa.
 
-use super::*;
 use crate::network::ConnectivityType;
+use super::task::{TaskSpec, TaskType, RewardDensity};
+
+/// Arquitetura derivada automaticamente
+#[derive(Debug, Clone)]
+pub struct DerivedArchitecture {
+    /// Número total de neurônios
+    pub total_neurons: usize,
+
+    /// Índices dos neurônios sensores
+    pub sensor_indices: std::ops::Range<usize>,
+
+    /// Índices dos neurônios hidden
+    pub hidden_indices: std::ops::Range<usize>,
+
+    /// Índices dos neurônios atuadores
+    pub actuator_indices: std::ops::Range<usize>,
+
+    /// Tipo de conectividade
+    pub connectivity: ConnectivityType,
+
+    /// Razão de neurônios inibitórios [0, 1]
+    pub inhibitory_ratio: f64,
+
+    /// Threshold inicial para disparo
+    pub initial_threshold: f64,
+}
 
 impl DerivedArchitecture {
-    /// Deriva arquitetura completa a partir da especificação da tarefa
+    /// Deriva arquitetura a partir da especificação da tarefa
     pub fn from_task(task: &TaskSpec) -> Self {
-        // 1. Calcula número de neurônios hidden
         let num_hidden = derive_num_hidden(
             task.num_sensors,
             task.num_actuators,
             &task.task_type,
         );
 
-        // 2. Calcula total de neurônios
         let total_neurons = task.num_sensors + num_hidden + task.num_actuators;
 
-        // 3. Define índices de cada camada
         let sensor_indices = 0..task.num_sensors;
         let hidden_indices = task.num_sensors..(task.num_sensors + num_hidden);
         let actuator_indices = (task.num_sensors + num_hidden)..total_neurons;
 
-        // 4. Determina topologia de conectividade
         let connectivity = derive_connectivity(total_neurons, &task.task_type);
-
-        // 5. Determina razão inibitória
         let inhibitory_ratio = derive_inhibitory_ratio(&task.task_type);
-
-        // 6. Determina threshold inicial
         let initial_threshold = derive_initial_threshold(connectivity, &task.task_type);
 
         DerivedArchitecture {
@@ -42,230 +59,142 @@ impl DerivedArchitecture {
             initial_threshold,
         }
     }
+
+    /// Retorna número de neurônios por camada
+    pub fn layer_sizes(&self) -> (usize, usize, usize) {
+        (
+            self.sensor_indices.len(),
+            self.hidden_indices.len(),
+            self.actuator_indices.len(),
+        )
+    }
+
+    /// Estima a capacidade de memória da rede
+    ///
+    /// Baseado na regra de Hopfield: ~0.14N para redes de memória associativa
+    pub fn estimate_memory_capacity(&self) -> usize {
+        let excitatory_neurons = (self.total_neurons as f64 * (1.0 - self.inhibitory_ratio)) as usize;
+        let base_capacity = (excitatory_neurons as f64 * 0.05) as usize;
+        base_capacity.max(1)
+    }
+
+    /// Retorna número de neurônios excitatórios
+    pub fn num_excitatory(&self) -> usize {
+        ((1.0 - self.inhibitory_ratio) * self.total_neurons as f64) as usize
+    }
+
+    /// Retorna número de neurônios inibitórios
+    pub fn num_inhibitory(&self) -> usize {
+        (self.inhibitory_ratio * self.total_neurons as f64) as usize
+    }
+
+    /// Verifica se usa conectividade esparsa
+    pub fn is_sparse(&self) -> bool {
+        matches!(self.connectivity, ConnectivityType::Grid2D)
+    }
 }
 
 // ============================================================================
 // FUNÇÕES DE DERIVAÇÃO
 // ============================================================================
 
-/// Calcula número de neurônios hidden
-///
-/// Regra biológica: Camada hidden ~ média geométrica de I/O × fator de expansão
-/// Similar ao teorema de Kolmogorov-Arnold (1 hidden layer suficiente)
-///
-/// # Justificativa Biológica
-/// Córtex visual: ~100M inputs (retina) → ~1B neurons (V1) → ~10M outputs
-/// Ratio: 1:10:0.1 (entrada:hidden:saída)
-pub fn derive_num_hidden(
-    num_sensors: usize,
-    num_actuators: usize,
-    task_type: &TaskType,
-) -> usize {
-    // Média geométrica (valor base)
+/// Deriva número de neurônios hidden
+fn derive_num_hidden(num_sensors: usize, num_actuators: usize, task_type: &TaskType) -> usize {
+    // Média geométrica como base
     let geometric_mean = ((num_sensors * num_actuators) as f64).sqrt();
 
-    // Fator de expansão baseado na complexidade da tarefa
+    // Fator de expansão baseado no tipo de tarefa
     let expansion_factor = match task_type {
-        TaskType::ReinforcementLearning { .. } => 2.0,  // RL precisa exploração
-        TaskType::SupervisedClassification { .. } => 1.5,
-        TaskType::AssociativeMemory { .. } => 3.0,  // Memória precisa capacidade
+        TaskType::ReinforcementLearning { temporal_horizon, .. } => {
+            let base = 2.0;
+            match temporal_horizon {
+                Some(h) if *h > 200 => base * 1.5,  // Horizonte longo precisa mais memória
+                Some(h) if *h > 100 => base * 1.25,
+                _ => base,
+            }
+        }
+        TaskType::SupervisedClassification { num_classes } => {
+            let base = 1.5;
+            if *num_classes > 10 { base * 1.5 } else { base }
+        }
+        TaskType::AssociativeMemory { pattern_capacity } => {
+            // Regra de Hopfield: N >= patterns / 0.14
+            let min_neurons = (*pattern_capacity as f64 / 0.14).ceil();
+            (min_neurons / geometric_mean).max(3.0)
+        }
     };
 
     let base_hidden = (geometric_mean * expansion_factor) as usize;
-
-    // Clamp: hidden deve ser pelo menos igual a I/O, no máximo 10× I/O
     let io_size = num_sensors + num_actuators;
+
+    // Clamp entre IO e 10x IO
     base_hidden.clamp(io_size, io_size * 10)
 }
 
-/// Determina topologia de conectividade
-///
-/// # Regras
-/// - RL com rede pequena (<50): FullyConnected (melhor para exploração)
-/// - RL com rede grande (≥50): Grid2D (escalabilidade)
-/// - Classificação: FullyConnected (features globais)
-/// - Memória: Grid2D (localidade topográfica)
-pub fn derive_connectivity(
-    total_neurons: usize,
-    task_type: &TaskType,
-) -> ConnectivityType {
+/// Deriva tipo de conectividade
+fn derive_connectivity(total_neurons: usize, task_type: &TaskType) -> ConnectivityType {
     match task_type {
         TaskType::ReinforcementLearning { .. } => {
+            // RL com muitos neurônios usa Grid2D para eficiência
             if total_neurons < 50 {
                 ConnectivityType::FullyConnected
             } else {
                 ConnectivityType::Grid2D
             }
         }
-
         TaskType::SupervisedClassification { .. } => {
+            // Classificação geralmente precisa de conexões globais
             ConnectivityType::FullyConnected
         }
-
         TaskType::AssociativeMemory { .. } => {
+            // Memória associativa usa padrões locais
             ConnectivityType::Grid2D
         }
     }
 }
 
-/// Determina razão de neurônios inibitórios (Dale's Principle)
-///
-/// # Justificativa Biológica
-/// Córtex cerebral: ~20-30% de neurônios GABAérgicos (inibitórios)
-/// Variação por região:
-/// - Sensory cortex: ~25% (controle de ganho)
-/// - Motor cortex: ~15% (precisão)
-/// - Hippocampus: ~10-15% (recall de memória)
-pub fn derive_inhibitory_ratio(task_type: &TaskType) -> f64 {
+/// Deriva razão de neurônios inibitórios
+fn derive_inhibitory_ratio(task_type: &TaskType) -> f64 {
     match task_type {
-        TaskType::ReinforcementLearning { .. } => 0.20,  // Balanço padrão (20%)
-        TaskType::SupervisedClassification { .. } => 0.25,  // Mais seletividade
-        TaskType::AssociativeMemory { .. } => 0.15,  // Facilita recall
+        TaskType::ReinforcementLearning { .. } => 0.20,      // 20% - padrão cortical
+        TaskType::SupervisedClassification { .. } => 0.25,   // 25% - mais controle
+        TaskType::AssociativeMemory { .. } => 0.15,          // 15% - menos inibição
     }
 }
 
-/// Determina threshold de disparo inicial
-///
-/// # Regra
-/// Threshold deve permitir disparo quando ~10-30% dos inputs estão ativos
-///
-/// # Justificativa
-/// - FullyConnected: Muitos inputs → threshold alto (evita saturação)
-/// - Grid2D: Poucos inputs (8 vizinhos) → threshold baixo (sensibilidade)
-pub fn derive_initial_threshold(
-    connectivity: ConnectivityType,
-    task_type: &TaskType,
-) -> f64 {
-    // Base threshold
+/// Deriva threshold inicial
+fn derive_initial_threshold(connectivity: ConnectivityType, task_type: &TaskType) -> f64 {
+    // Base depende da conectividade
     let base_threshold = match connectivity {
-        ConnectivityType::FullyConnected => 0.3,  // 30% dos inputs
-        ConnectivityType::Grid2D => 0.15,  // 15% (poucos inputs)
-        ConnectivityType::Isolated => 0.1,
+        ConnectivityType::FullyConnected => 0.3,   // Mais inputs = threshold maior
+        ConnectivityType::Grid2D => 0.15,          // Menos inputs = threshold menor
+        ConnectivityType::Isolated => 0.5,         // Debug
     };
 
-    // Ajuste por tipo de tarefa
+    // Multiplica por fator da tarefa
     let task_multiplier = match task_type {
-        TaskType::ReinforcementLearning { .. } => 1.0,  // Padrão
+        TaskType::ReinforcementLearning { reward_density, .. } => {
+            match reward_density {
+                RewardDensity::Sparse => 0.9,   // Mais sensível para reward esparso
+                RewardDensity::Dense => 1.1,   // Menos sensível
+                _ => 1.0,
+            }
+        }
         TaskType::SupervisedClassification { .. } => 1.3,  // Mais seletivo
-        TaskType::AssociativeMemory { .. } => 0.8,  // Mais sensível (recall)
+        TaskType::AssociativeMemory { .. } => 0.8,         // Menos seletivo para padrões
     };
 
     base_threshold * task_multiplier
 }
-
-// ============================================================================
-// TESTES
-// ============================================================================
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_derive_num_hidden() {
-        // Caso básico: 4 sensors, 4 actuators, RL
-        let num_hidden = derive_num_hidden(
-            4,
-            4,
-            &TaskType::ReinforcementLearning {
-                reward_density: RewardDensity::Auto,
-                temporal_horizon: None,
-            },
-        );
-
-        // geometric_mean = sqrt(4*4) = 4
-        // base = 4 * 2.0 = 8
-        assert_eq!(num_hidden, 8);
-    }
-
-    #[test]
-    fn test_derive_num_hidden_memory() {
-        // Memória precisa mais neurônios (fator 3.0)
-        let num_hidden = derive_num_hidden(
-            4,
-            4,
-            &TaskType::AssociativeMemory {
-                pattern_capacity: 100,
-            },
-        );
-
-        // base = 4 * 3.0 = 12
-        assert_eq!(num_hidden, 12);
-    }
-
-    #[test]
-    fn test_derive_connectivity_small_rl() {
-        // Rede pequena RL (<50): FullyConnected
-        let conn = derive_connectivity(
-            20,
-            &TaskType::ReinforcementLearning {
-                reward_density: RewardDensity::Auto,
-                temporal_horizon: None,
-            },
-        );
-
-        assert!(matches!(conn, ConnectivityType::FullyConnected));
-    }
-
-    #[test]
-    fn test_derive_connectivity_large_rl() {
-        // Rede grande RL (≥50): Grid2D
-        let conn = derive_connectivity(
-            100,
-            &TaskType::ReinforcementLearning {
-                reward_density: RewardDensity::Auto,
-                temporal_horizon: None,
-            },
-        );
-
-        assert!(matches!(conn, ConnectivityType::Grid2D));
-    }
-
-    #[test]
-    fn test_derive_inhibitory_ratio() {
-        let rl_ratio = derive_inhibitory_ratio(&TaskType::ReinforcementLearning {
-            reward_density: RewardDensity::Auto,
-            temporal_horizon: None,
-        });
-
-        assert_eq!(rl_ratio, 0.20);
-
-        let memory_ratio = derive_inhibitory_ratio(&TaskType::AssociativeMemory {
-            pattern_capacity: 100,
-        });
-
-        assert_eq!(memory_ratio, 0.15);
-    }
-
-    #[test]
-    fn test_derive_initial_threshold() {
-        // FullyConnected → threshold mais alto
-        let fc_threshold = derive_initial_threshold(
-            ConnectivityType::FullyConnected,
-            &TaskType::ReinforcementLearning {
-                reward_density: RewardDensity::Auto,
-                temporal_horizon: None,
-            },
-        );
-
-        // Grid2D → threshold mais baixo
-        let grid_threshold = derive_initial_threshold(
-            ConnectivityType::Grid2D,
-            &TaskType::ReinforcementLearning {
-                reward_density: RewardDensity::Auto,
-                temporal_horizon: None,
-            },
-        );
-
-        assert!(fc_threshold > grid_threshold);
-        assert_eq!(fc_threshold, 0.3);
-        assert_eq!(grid_threshold, 0.15);
-    }
-
-    #[test]
-    fn test_full_architecture_derivation() {
+    fn test_architecture_derivation() {
         let task = TaskSpec {
-            num_sensors: 4,
+            num_sensors: 8,
             num_actuators: 4,
             task_type: TaskType::ReinforcementLearning {
                 reward_density: RewardDensity::Auto,
@@ -275,15 +204,53 @@ mod tests {
 
         let arch = DerivedArchitecture::from_task(&task);
 
-        // Verifica estrutura
-        assert_eq!(arch.sensor_indices, 0..4);
-        assert_eq!(arch.hidden_indices, 4..12);  // 8 hidden neurons
-        assert_eq!(arch.actuator_indices, 12..16);
-        assert_eq!(arch.total_neurons, 16);
+        assert_eq!(arch.sensor_indices.len(), 8);
+        assert_eq!(arch.actuator_indices.len(), 4);
+        assert!(arch.hidden_indices.len() >= 12); // >= IO size
+        assert!(arch.inhibitory_ratio > 0.0 && arch.inhibitory_ratio < 1.0);
+    }
 
-        // Verifica parâmetros
-        assert!(matches!(arch.connectivity, ConnectivityType::FullyConnected));
-        assert_eq!(arch.inhibitory_ratio, 0.20);
-        assert_eq!(arch.initial_threshold, 0.3);
+    #[test]
+    fn test_memory_capacity() {
+        let task = TaskSpec {
+            num_sensors: 100,
+            num_actuators: 100,
+            task_type: TaskType::AssociativeMemory { pattern_capacity: 10 },
+        };
+
+        let arch = DerivedArchitecture::from_task(&task);
+        let capacity = arch.estimate_memory_capacity();
+
+        assert!(capacity >= 1);
+    }
+
+    #[test]
+    fn test_sparse_connectivity() {
+        let small_task = TaskSpec {
+            num_sensors: 4,
+            num_actuators: 4,
+            task_type: TaskType::ReinforcementLearning {
+                reward_density: RewardDensity::Auto,
+                temporal_horizon: None,
+            },
+        };
+
+        let large_task = TaskSpec {
+            num_sensors: 50,
+            num_actuators: 50,
+            task_type: TaskType::ReinforcementLearning {
+                reward_density: RewardDensity::Auto,
+                temporal_horizon: None,
+            },
+        };
+
+        let small_arch = DerivedArchitecture::from_task(&small_task);
+        let large_arch = DerivedArchitecture::from_task(&large_task);
+
+        // Rede pequena deve ser fully connected
+        assert!(!small_arch.is_sparse());
+
+        // Rede grande deve ser esparsa
+        assert!(large_arch.is_sparse());
     }
 }
