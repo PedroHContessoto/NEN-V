@@ -35,7 +35,9 @@ fn main() {
     
     // Módulo de Curiosidade (ICM-style)
     let mut curiosity = CuriosityModule::new(state_size, action_size);
-    curiosity.curiosity_scale = 0.2; // Escala da recompensa intrínseca
+    curiosity.curiosity_scale = 0.12; // Escala intermediária da recompensa intrínseca
+    curiosity.surprise_threshold = 0.03; // Evita reforçar surpresas muito fracas
+    curiosity.habituation_rate = 0.997; // Habitua devagar para manter curiosidade
     
     // Random Network Distillation (alternativa)
     let mut rnd = RandomNetworkDistillation::new(state_size, 16);
@@ -98,11 +100,11 @@ fn main() {
         working_memory.encode(next_state.clone(), step as i64);
         working_memory.sustain();
 
-        // Combina recompensas intrínsecas
-        let combined_reward = icm_reward * 0.5 + rnd_reward * 0.3;
+        // Combina recompensas intrínsecas priorizando ICM e reduzindo RND
+        let combined_reward = icm_reward * 0.8 + rnd_reward * 0.15;
 
         // Propaga para a rede se reward significativo
-        if combined_reward > 0.1 {
+        if combined_reward > 0.05 {
             network.propagate_reward(combined_reward);
         }
 

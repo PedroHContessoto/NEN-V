@@ -1,0 +1,54 @@
+=== HYPERPARAMETER OPTIMIZATION RESULTS ===
+Experiment: hyperopt_run
+Strategy: BayesianOptimization
+Trials: 25
+Best Score: 0.664691
+
+=== BEST CONFIGURATION ===
+learning.trace_increment: Float(0.1147506618557383)
+homeostasis.homeo_interval: Int(6)
+energy.recovery_rate: Float(9.899594430089834)
+memory.consolidation_rate: Float(0.0002057164587593354)
+learning.stdp_a_plus: Float(0.0025338180725865676)
+curiosity.surprise_threshold: Float(0.008346435742329156)
+network.inhibitory_ratio: Float(0.18868109974746622)
+network.initial_exc_weight: Float(0.044894646137229786)
+timing.eligibility_trace_tau: Float(75.12737919740607)
+homeostasis.memory_alpha: Float(0.018520699113492155)
+memory.tag_decay_rate: Float(0.003701459171178125)
+working_memory.capacity: Int(6)
+network.initial_inh_weight: Float(0.24945500394083908)
+memory.dopamine_sensitivity: Float(2.7387904563776195)
+homeostasis.meta_threshold: Float(0.06172049163415108)
+homeostasis.homeo_eta: Float(0.012955522322229913)
+timing.stdp_window: Int(37)
+curiosity.scale: Float(0.11777148601547151)
+predictive.state_learning_rate: Float(0.012432701753130741)
+timing.stdp_tau_minus: Float(17.56369415730324)
+learning.weight_decay: Float(1.1408032780521371e-5)
+network.initial_threshold: Float(0.2885698336615623)
+learning.stdp_a_minus: Float(0.004280777145309019)
+timing.stdp_tau_plus: Float(50.31554706867681)
+learning.istdp_rate: Float(0.0009698244695368221)
+learning.base_learning_rate: Float(0.00547117307298591)
+stp.use_fraction: Float(0.11241165551180292)
+competition.strength: Float(0.2074245965358393)
+homeostasis.target_firing_rate: Float(0.11129296192929451)
+timing.stp_recovery_tau: Float(52.45049601710646)
+memory.weight_clamp: Float(2.0571544927212306)
+learning.ltp_ltd_ratio: Float(2.1976346346078524)
+timing.refractory_period: Int(4)
+curiosity.habituation_rate: Float(0.9112427045470669)
+energy.cost_fire_ratio: Float(0.03056805351296627)
+
+=== TOP 10 TRIALS ===
+1. Trial 4 - Score: 0.664691
+2. Trial 9 - Score: 0.654991
+3. Trial 1 - Score: 0.644685
+4. Trial 21 - Score: 0.636557
+5. Trial 6 - Score: 0.633866
+6. Trial 18 - Score: 0.633114
+7. Trial 7 - Score: 0.609858
+8. Trial 3 - Score: 0.608389
+9. Trial 15 - Score: 0.603912
+10. Trial 12 - Score: 0.587365
