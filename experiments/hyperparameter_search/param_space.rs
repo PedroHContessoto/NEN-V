@@ -600,7 +600,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "energy",
             "Razão de custo por disparo (% da energia máx)",
             ParameterRange::continuous(0.01, 0.15),
-            ParameterValue::Float(0.0449505),
+            ParameterValue::Float(0.03056805),
         )
         .with_importance(0.7)
     );
@@ -611,7 +611,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "energy",
             "Taxa de recuperação de energia",
             ParameterRange::continuous(1.0, 25.0),
-            ParameterValue::Float(7.445476),
+            ParameterValue::Float(9.8995944),
         )
         .with_importance(0.65)
     );
@@ -636,7 +636,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "memory",
             "Limite máximo de peso sináptico",
             ParameterRange::continuous(1.0, 5.0),
-            ParameterValue::Float(1.6505425),
+            ParameterValue::Float(2.0571545),
         )
         .with_importance(0.7)
     );
@@ -647,7 +647,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "memory",
             "Taxa de decaimento de tags sinápticos",
             ParameterRange::log_continuous(0.001, 0.05),
-            ParameterValue::Float(0.00281202),
+            ParameterValue::Float(0.003701459),
         )
         .with_importance(0.6)
     );
@@ -669,7 +669,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "memory",
             "Sensibilidade à dopamina",
             ParameterRange::continuous(1.0, 10.0),
-            ParameterValue::Float(3.7127331),
+            ParameterValue::Float(2.7387905),
         )
         .with_importance(0.7)
     );
@@ -680,7 +680,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "memory",
             "Taxa base de consolidação",
             ParameterRange::log_continuous(0.0001, 0.01),
-            ParameterValue::Float(0.0004280777),
+            ParameterValue::Float(0.0002057165),
         )
         .with_importance(0.6)
     );
@@ -694,7 +694,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "curiosity",
             "Escala do reward de curiosidade",
             ParameterRange::continuous(0.01, 0.5),
-            ParameterValue::Float(0.1038337),
+            ParameterValue::Float(0.1177715),
         )
         .with_importance(0.75)
     );
@@ -705,7 +705,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "curiosity",
             "Threshold de surpresa",
             ParameterRange::log_continuous(0.001, 0.1),
-            ParameterValue::Float(0.00205716),
+            ParameterValue::Float(0.008346436),
         )
         .with_importance(0.6)
     );
@@ -716,7 +716,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "curiosity",
             "Taxa de habituação",
             ParameterRange::continuous(0.9, 0.999),
-            ParameterValue::Float(0.9145446),
+            ParameterValue::Float(0.9112427),
         )
         .with_importance(0.65)
     );
