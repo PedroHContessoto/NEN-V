@@ -5,43 +5,79 @@
 //! ## Arquitetura
 //!
 //! ```text
-//! ┌─────────────────────────────────────────────────────────────────────────┐
-//! │                    HYPERPARAMETER OPTIMIZATION SYSTEM                   │
-//! ├─────────────────────────────────────────────────────────────────────────┤
-//! │                                                                         │
-//! │  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    │
-//! │  │  Parameter      │    │    Search       │    │   Evaluation    │    │
-//! │  │  Space          │───►│    Strategy     │───►│   System        │    │
-//! │  │  Definition     │    │  (Bayesian/etc) │    │   (Benchmarks)  │    │
-//! │  └─────────────────┘    └─────────────────┘    └─────────────────┘    │
-//! │           │                      │                      │             │
-//! │           ▼                      ▼                      ▼             │
-//! │  ┌─────────────────────────────────────────────────────────────┐      │
-//! │  │                    Experiment Orchestrator                   │      │
-//! │  │  - Parallel execution                                        │      │
-//! │  │  - Early stopping                                            │      │
-//! │  │  - Result logging                                            │      │
-//! │  │  - Best config tracking                                      │      │
-//! │  └─────────────────────────────────────────────────────────────┘      │
-//! │                                                                         │
-//! └─────────────────────────────────────────────────────────────────────────┘
+//! ┌─────────────────────────────────────────────────────────────────────────────┐
+//! │                    HYPERPARAMETER OPTIMIZATION SYSTEM                       │
+//! ├─────────────────────────────────────────────────────────────────────────────┤
+//! │                                                                             │
+//! │  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐        │
+//! │  │  Parameter      │    │    Search       │    │   Real          │        │
+//! │  │  Space          │───▶│    Strategy     │───▶│   Evaluation    │        │
+//! │  │  (45+ params)   │    │  (Bayesian/etc) │    │   (Benchmarks)  │        │
+//! │  └─────────────────┘    └─────────────────┘    └─────────────────┘        │
+//! │           │                      │                      │                  │
+//! │           ▼                      ▼                      ▼                  │
+//! │  ┌─────────────────────────────────────────────────────────────────────┐  │
+//! │  │                    Experiment Orchestrator                           │  │
+//! │  │  • Runs neural agent in real environments                           │  │
+//! │  │  • Collects: reward, success rate, stability, efficiency            │  │
+//! │  │  • Early stopping on score improvement                              │  │
+//! │  │  • Logging and checkpointing                                        │  │
+//! │  └─────────────────────────────────────────────────────────────────────┘  │
+//! │                                                                             │
+//! │  ┌─────────────────────────────────────────────────────────────────────┐  │
+//! │  │                    Environment Suite                                 │  │
+//! │  │  • NavigationEnv     - Grid world navigation                        │  │
+//! │  │  • PatternMemoryEnv  - Sequential pattern memorization              │  │
+//! │  │  • PredictionEnv     - Time series prediction                       │  │
+//! │  │  • AssociationEnv    - Stimulus-response learning                   │  │
+//! │  └─────────────────────────────────────────────────────────────────────┘  │
+//! │                                                                             │
+//! └─────────────────────────────────────────────────────────────────────────────┘
 //! ```
 //!
 //! ## Módulos
 //!
-//! - `param_space`: Definição do espaço de parâmetros
+//! - `param_space`: Definição do espaço de 45+ parâmetros otimizáveis
 //! - `search`: Algoritmos de busca (Grid, Random, Bayesian, Evolutionary)
-//! - `evaluation`: Benchmarks e métricas de avaliação
+//! - `environments`: Ambientes reais para avaliação (Navigation, Memory, Prediction)
+//! - `evaluation`: Sistema de benchmarks com métricas reais
 //! - `orchestrator`: Coordenação de experimentos
 //!
 //! ## Uso
 //!
 //! ```bash
+//! # Bayesian Optimization (recomendado)
 //! cargo run --release --bin hyperopt -- --strategy bayesian --trials 100
+//!
+//! # Teste rápido
+//! cargo run --release --bin hyperopt -- --quick
+//!
+//! # Evolutionary Search com população grande
+//! cargo run --release --bin hyperopt -- --strategy evolutionary --population 30 --trials 200
+//! ```
+//!
+//! ## Adicionando Novos Benchmarks
+//!
+//! 1. Crie um novo ambiente implementando `trait Environment` em `environments.rs`
+//! 2. Registre o ambiente em `EnvironmentBenchmark::create_environment()`
+//! 3. Adicione à `BenchmarkSuite::default_suite()` com peso apropriado
+//!
+//! ```rust
+//! // Exemplo de novo ambiente
+//! pub struct MeuAmbiente { ... }
+//!
+//! impl Environment for MeuAmbiente {
+//!     fn reset(&mut self) -> Vec<f64> { ... }
+//!     fn step(&mut self, action: usize) -> StepResult { ... }
+//!     fn observation_size(&self) -> usize { ... }
+//!     fn action_size(&self) -> usize { ... }
+//!     fn name(&self) -> &str { "MeuAmbiente" }
+//! }
 //! ```
 
 pub mod param_space;
 pub mod search;
+pub mod environments;
 pub mod evaluation;
 pub mod orchestrator;
 
@@ -53,9 +89,15 @@ pub use search::{
     SearchStrategy, GridSearch, RandomSearch, BayesianSearch,
     EvolutionarySearch, SearchResult,
 };
+pub use environments::{
+    Environment, StepResult, EnvironmentRegistry,
+    NavigationEnv, PatternMemoryEnv, PredictionEnv, AssociationEnv,
+};
 pub use evaluation::{
     Evaluator, BenchmarkSuite, BenchmarkResult, EvaluationMetrics,
-    TaskBenchmark, ConvergenceBenchmark, StabilityBenchmark,
+    Benchmark, EnvironmentBenchmark, MetricWeights, EvaluationConfig,
+    NENVAgent, AgentConfig, AgentStats, NetworkAgentStats, EpisodeLog,
+    EnvironmentMetrics,
 };
 pub use orchestrator::{
     ExperimentOrchestrator, ExperimentConfig, ExperimentResult,

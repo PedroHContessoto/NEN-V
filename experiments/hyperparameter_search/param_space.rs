@@ -371,7 +371,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "timing",
             "Período refratário após disparo (timesteps)",
             ParameterRange::integer(1, 20),
-            ParameterValue::Int(4),
+            ParameterValue::Int(10),
         )
         .with_importance(0.7)
     );
@@ -382,7 +382,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "timing",
             "Janela temporal para STDP (timesteps)",
             ParameterRange::integer(10, 100),
-            ParameterValue::Int(37),
+            ParameterValue::Int(17),
         )
         .with_importance(0.9)
     );
@@ -393,7 +393,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "timing",
             "Constante de tempo para LTP",
             ParameterRange::continuous(10.0, 100.0),
-            ParameterValue::Float(50.3155471),
+            ParameterValue::Float(30.7355763),
         )
         .with_importance(0.85)
     );
@@ -404,7 +404,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "timing",
             "Constante de tempo para LTD",
             ParameterRange::continuous(5.0, 50.0),
-            ParameterValue::Float(17.5636942),
+            ParameterValue::Float(5.30269057),
         )
         .with_importance(0.85)
     );
@@ -415,7 +415,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "timing",
             "Constante de tempo do eligibility trace",
             ParameterRange::log_continuous(50.0, 500.0),
-            ParameterValue::Float(75.1273792),
+            ParameterValue::Float(168.1850978),
         )
         .with_importance(0.8)
     );
@@ -426,7 +426,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "timing",
             "Constante de tempo de recuperação STP",
             ParameterRange::continuous(50.0, 300.0),
-            ParameterValue::Float(52.4504960),
+            ParameterValue::Float(75.5714943),
         )
         .with_importance(0.6)
     );
@@ -440,7 +440,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "learning",
             "Taxa de aprendizado base",
             ParameterRange::log_continuous(0.001, 0.1),
-            ParameterValue::Float(0.0054711731),
+            ParameterValue::Float(0.0028386203),
         )
         .with_importance(0.95)
     );
@@ -451,7 +451,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "learning",
             "Amplitude de LTP",
             ParameterRange::log_continuous(0.001, 0.1),
-            ParameterValue::Float(0.0025338181),
+            ParameterValue::Float(0.0259091722),
         )
         .with_importance(0.9)
     );
@@ -462,7 +462,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "learning",
             "Amplitude de LTD",
             ParameterRange::log_continuous(0.001, 0.1),
-            ParameterValue::Float(0.0042807771),
+            ParameterValue::Float(0.047677410),
         )
         .with_importance(0.9)
     );
@@ -473,7 +473,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "learning",
             "Razão LTP/LTD (a_plus/a_minus)",
             ParameterRange::continuous(1.0, 4.0),
-            ParameterValue::Float(2.1976346),
+            ParameterValue::Float(2.2750567),
         )
         .with_importance(0.85)
     );
@@ -484,7 +484,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "learning",
             "Taxa de decaimento de peso",
             ParameterRange::log_continuous(0.00001, 0.01),
-            ParameterValue::Float(0.000011408032780521371),
+            ParameterValue::Float(0.002268923),
         )
         .with_importance(0.7)
     );
@@ -495,7 +495,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "learning",
             "Incremento do eligibility trace",
             ParameterRange::continuous(0.05, 0.3),
-            ParameterValue::Float(0.1147507),
+            ParameterValue::Float(0.171328656),
         )
         .with_importance(0.75)
     );
@@ -506,7 +506,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "learning",
             "Taxa de iSTDP",
             ParameterRange::log_continuous(0.0001, 0.01),
-            ParameterValue::Float(0.0009698245),
+            ParameterValue::Float(0.004623863),
         )
         .with_importance(0.6)
     );
@@ -520,7 +520,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "homeostasis",
             "Taxa de disparo alvo",
             ParameterRange::continuous(0.03, 0.25),
-            ParameterValue::Float(0.1112930),
+            ParameterValue::Float(0.051843115),
         )
         .with_importance(0.9)
     );
@@ -531,7 +531,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "homeostasis",
             "Taxa de ajuste homeostático",
             ParameterRange::log_continuous(0.01, 0.5),
-            ParameterValue::Float(0.0129555),
+            ParameterValue::Float(0.013410262),
         )
         .with_importance(0.85)
     );
@@ -542,7 +542,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "homeostasis",
             "Intervalo entre ajustes homeostáticos",
             ParameterRange::integer(1, 20),
-            ParameterValue::Int(6),
+            ParameterValue::Int(7),
         )
         .with_importance(0.7)
     );
@@ -553,7 +553,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "homeostasis",
             "Fator de memória exponencial",
             ParameterRange::log_continuous(0.005, 0.1),
-            ParameterValue::Float(0.0185207),
+            ParameterValue::Float(0.027030456),
         )
         .with_importance(0.65)
     );
@@ -564,7 +564,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "homeostasis",
             "Threshold para meta-plasticidade",
             ParameterRange::continuous(0.05, 0.3),
-            ParameterValue::Float(0.0617205),
+            ParameterValue::Float(0.118178824),
         )
         .with_importance(0.6)
     );
@@ -575,7 +575,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "homeostasis",
             "Taxa de ajuste meta-plástico",
             ParameterRange::log_continuous(0.001, 0.05),
-            ParameterValue::Float(0.005),
+            ParameterValue::Float(0.001049833),
         )
         .with_importance(0.55)
     );
@@ -589,7 +589,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "energy",
             "Energia máxima por neurônio",
             ParameterRange::continuous(50.0, 200.0),
-            ParameterValue::Float(100.0),
+            ParameterValue::Float(70.295655),
         )
         .with_importance(0.5)
     );
@@ -600,7 +600,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "energy",
             "Razão de custo por disparo (% da energia máx)",
             ParameterRange::continuous(0.01, 0.15),
-            ParameterValue::Float(0.03056805),
+            ParameterValue::Float(0.020109225),
         )
         .with_importance(0.7)
     );
@@ -611,7 +611,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "energy",
             "Taxa de recuperação de energia",
             ParameterRange::continuous(1.0, 25.0),
-            ParameterValue::Float(9.8995944),
+            ParameterValue::Float(3.6711581),
         )
         .with_importance(0.65)
     );
@@ -622,7 +622,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "energy",
             "Fator de custo energético da plasticidade",
             ParameterRange::continuous(0.01, 0.2),
-            ParameterValue::Float(0.08),
+            ParameterValue::Float(0.024861608),
         )
         .with_importance(0.5)
     );
@@ -636,7 +636,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "memory",
             "Limite máximo de peso sináptico",
             ParameterRange::continuous(1.0, 5.0),
-            ParameterValue::Float(2.0571545),
+            ParameterValue::Float(1.9990270),
         )
         .with_importance(0.7)
     );
@@ -647,7 +647,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "memory",
             "Taxa de decaimento de tags sinápticos",
             ParameterRange::log_continuous(0.001, 0.05),
-            ParameterValue::Float(0.003701459),
+            ParameterValue::Float(0.014629510),
         )
         .with_importance(0.6)
     );
@@ -658,7 +658,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "memory",
             "Threshold para captura de memória",
             ParameterRange::continuous(0.05, 0.3),
-            ParameterValue::Float(0.15),
+            ParameterValue::Float(0.13766205),
         )
         .with_importance(0.55)
     );
@@ -669,7 +669,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "memory",
             "Sensibilidade à dopamina",
             ParameterRange::continuous(1.0, 10.0),
-            ParameterValue::Float(2.7387905),
+            ParameterValue::Float(1.4382352),
         )
         .with_importance(0.7)
     );
@@ -680,7 +680,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "memory",
             "Taxa base de consolidação",
             ParameterRange::log_continuous(0.0001, 0.01),
-            ParameterValue::Float(0.0002057165),
+            ParameterValue::Float(0.0021187201),
         )
         .with_importance(0.6)
     );
@@ -694,7 +694,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "curiosity",
             "Escala do reward de curiosidade",
             ParameterRange::continuous(0.01, 0.5),
-            ParameterValue::Float(0.1177715),
+            ParameterValue::Float(0.16323343),
         )
         .with_importance(0.75)
     );
@@ -705,7 +705,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "curiosity",
             "Threshold de surpresa",
             ParameterRange::log_continuous(0.001, 0.1),
-            ParameterValue::Float(0.008346436),
+            ParameterValue::Float(0.029070605),
         )
         .with_importance(0.6)
     );
@@ -716,7 +716,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "curiosity",
             "Taxa de habituação",
             ParameterRange::continuous(0.9, 0.999),
-            ParameterValue::Float(0.9112427),
+            ParameterValue::Float(0.94747423),
         )
         .with_importance(0.65)
     );
@@ -730,7 +730,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "network",
             "Razão de neurônios inibitórios",
             ParameterRange::continuous(0.1, 0.4),
-            ParameterValue::Float(0.2107121),
+            ParameterValue::Float(0.15375260),
         )
         .with_importance(0.8)
     );
@@ -741,7 +741,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "network",
             "Threshold inicial de disparo",
             ParameterRange::continuous(0.1, 0.5),
-            ParameterValue::Float(0.1879767),
+            ParameterValue::Float(0.19501885),
         )
         .with_importance(0.75)
     );
@@ -752,7 +752,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "network",
             "Peso excitatório inicial",
             ParameterRange::continuous(0.02, 0.15),
-            ParameterValue::Float(0.0812852),
+            ParameterValue::Float(0.022432839),
         )
         .with_importance(0.7)
     );
@@ -763,7 +763,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "network",
             "Peso inibitório inicial",
             ParameterRange::continuous(0.1, 1.5),
-            ParameterValue::Float(0.619143),
+            ParameterValue::Float(0.60613958),
         )
         .with_importance(0.7)
     );
@@ -777,7 +777,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "competition",
             "Força da competição lateral",
             ParameterRange::continuous(0.1, 0.5),
-            ParameterValue::Float(0.2116773),
+            ParameterValue::Float(0.12861959),
         )
         .with_importance(0.6)
     );
@@ -788,7 +788,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "competition",
             "Intervalo entre competições",
             ParameterRange::integer(5, 20),
-            ParameterValue::Int(10),
+            ParameterValue::Int(8),
         )
         .with_importance(0.5)
     );
@@ -802,7 +802,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "working_memory",
             "Capacidade de slots WM",
             ParameterRange::integer(3, 12),
-            ParameterValue::Int(6),
+            ParameterValue::Int(5),
         )
         .with_importance(0.6)
     );
@@ -813,7 +813,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "working_memory",
             "Força da recorrência WM",
             ParameterRange::continuous(0.5, 0.95),
-            ParameterValue::Float(0.85),
+            ParameterValue::Float(0.72302573),
         )
         .with_importance(0.55)
     );
@@ -824,7 +824,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "working_memory",
             "Taxa de decaimento WM",
             ParameterRange::log_continuous(0.005, 0.1),
-            ParameterValue::Float(0.02),
+            ParameterValue::Float(0.04967245),
         )
         .with_importance(0.55)
     );
@@ -838,7 +838,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "sleep",
             "Intervalo entre ciclos de sono",
             ParameterRange::integer(500, 10000),
-            ParameterValue::Int(3000),
+            ParameterValue::Int(3185),
         )
         .with_importance(0.5)
     );
@@ -849,7 +849,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "sleep",
             "Ruído durante replay",
             ParameterRange::continuous(0.01, 0.2),
-            ParameterValue::Float(0.05),
+            ParameterValue::Float(0.088946066),
         )
         .with_importance(0.4)
     );
@@ -863,7 +863,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "stp",
             "Fração de recursos usados por spike",
             ParameterRange::continuous(0.05, 0.3),
-            ParameterValue::Float(0.1733366),
+            ParameterValue::Float(0.11263080),
         )
         .with_importance(0.6)
     );
@@ -877,7 +877,7 @@ pub fn create_full_parameter_space() -> ParameterSpace {
             "predictive",
             "Taxa de aprendizado de estados",
             ParameterRange::log_continuous(0.01, 0.5),
-            ParameterValue::Float(0.04244165),
+            ParameterValue::Float(0.06425661),
         )
         .with_importance(0.65)
     );

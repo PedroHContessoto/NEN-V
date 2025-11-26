@@ -20,6 +20,7 @@
 
 mod param_space;
 mod search;
+mod environments;
 mod evaluation;
 mod orchestrator;
 

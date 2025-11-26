@@ -1,0 +1,64 @@
+=== HYPERPARAMETER OPTIMIZATION RESULTS ===
+Experiment: hyperopt_fullsearch
+Strategy: BayesianOptimization
+Trials: 122
+Best Score: 0.672768
+
+=== BEST CONFIGURATION ===
+curiosity.habituation_rate: Float(0.922395021359761)
+energy.cost_fire_ratio: Float(0.042396134881394945)
+energy.recovery_rate: Float(12.656860778959668)
+timing.eligibility_trace_tau: Float(84.38439553938443)
+timing.stp_recovery_tau: Float(112.84996280745835)
+learning.weight_decay: Float(0.0017722233470557779)
+energy.max_energy: Float(104.27847063501329)
+learning.trace_increment: Float(0.07531770448557049)
+homeostasis.homeo_interval: Int(2)
+memory.tag_decay_rate: Float(0.0023921253686752463)
+working_memory.capacity: Int(6)
+memory.dopamine_sensitivity: Float(2.5016870057447083)
+curiosity.scale: Float(0.05651448836003302)
+homeostasis.meta_alpha: Float(0.006026614516979692)
+homeostasis.target_firing_rate: Float(0.0587386883210248)
+network.inhibitory_ratio: Float(0.17560071222847345)
+network.initial_threshold: Float(0.1850573352736089)
+predictive.inference_iterations: Int(4)
+sleep.interval: Int(2420)
+network.initial_exc_weight: Float(0.06958209512279884)
+working_memory.recurrent_strength: Float(0.7159393234448366)
+energy.plasticity_cost_factor: Float(0.036009549234530314)
+memory.consolidation_rate: Float(0.0026664963198049217)
+homeostasis.memory_alpha: Float(0.02960420244946243)
+sleep.replay_noise: Float(0.016661988391229413)
+timing.stdp_window: Int(43)
+memory.capture_threshold: Float(0.05064728397425434)
+learning.istdp_rate: Float(0.0018462870394685977)
+curiosity.surprise_threshold: Float(0.02815171834830002)
+learning.base_learning_rate: Float(0.00761770479232485)
+competition.strength: Float(0.1672806409344265)
+stp.use_fraction: Float(0.16963052491648833)
+network.initial_inh_weight: Float(0.5656253729634046)
+timing.stdp_tau_minus: Float(7.426419230742943)
+memory.weight_clamp: Float(2.8819461953551384)
+homeostasis.meta_threshold: Float(0.14383890110623065)
+timing.stdp_tau_plus: Float(18.113369186900876)
+working_memory.decay_rate: Float(0.007352865243412755)
+learning.stdp_a_minus: Float(0.004734277317704231)
+learning.ltp_ltd_ratio: Float(2.3113462879116056)
+predictive.state_learning_rate: Float(0.14819207540438326)
+homeostasis.homeo_eta: Float(0.14585553796166917)
+timing.refractory_period: Int(8)
+learning.stdp_a_plus: Float(0.01766673779572983)
+competition.interval: Int(7)
+
+=== TOP 10 TRIALS ===
+1. Trial 21 - Score: 0.672768
+2. Trial 119 - Score: 0.671559
+3. Trial 70 - Score: 0.666212
+4. Trial 102 - Score: 0.665499
+5. Trial 99 - Score: 0.656294
+6. Trial 6 - Score: 0.656105
+7. Trial 116 - Score: 0.654759
+8. Trial 67 - Score: 0.653648
+9. Trial 50 - Score: 0.651944
+10. Trial 35 - Score: 0.649957
