@@ -768,6 +768,17 @@ pub fn create_full_parameter_space() -> ParameterSpace {
         .with_importance(0.7)
     );
 
+    space.add_parameter(
+        ParameterDef::new(
+            "network.adaptive_threshold_multiplier",
+            "network",
+            "Multiplicador do adaptive threshold (sparse coding strength)",
+            ParameterRange::continuous(0.5, 5.0),
+            ParameterValue::Float(1.0),  // Default reduzido de 3.0 para 1.0
+        )
+        .with_importance(0.85)  // Alta importância - afeta runaway LTP/LTD
+    );
+
     // =========================================================================
     // PARÂMETROS DE COMPETIÇÃO
     // =========================================================================

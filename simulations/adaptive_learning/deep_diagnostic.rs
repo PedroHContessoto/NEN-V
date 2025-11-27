@@ -35,11 +35,11 @@
 //! - Oscilações (FFT ou variância em janelas)
 //! - Taxa de convergência
 
-use nenv_visual_sim::autoconfig::{
+use nenv_v2::autoconfig::{
     AutoConfig, TaskSpec, TaskType, RewardDensity,
-    adaptive::{AdaptiveState, monitor_and_adapt},
+    AdaptiveState,
 };
-use nenv_visual_sim::network::{LearningMode, Network};
+use nenv_v2::network::{LearningMode, Network};
 use rand::Rng;
 
 #[derive(Debug, Clone)]
@@ -200,11 +200,12 @@ impl NetworkSnapshot {
         };
 
         // PI state
-        let (target, integral, clamp) = adaptive.pi_state();
+        let target = adaptive.config.params.target_firing_rate;
         let pi_error = target - fr_mean;
-        let pi_integral = integral;
-        let pi_integral_saturated = integral.abs() >= clamp * 0.95;
-        let pi_u = 0.4 * pi_error + 0.05 * integral; // Kp=0.4, Ki=0.05
+        let pi_integral = adaptive.pi_integral_fr;
+        let clamp = 0.5; // anti-windup clamp estimado
+        let pi_integral_saturated = pi_integral.abs() >= clamp * 0.95;
+        let pi_u: f64 = 0.4 * pi_error + 0.05 * pi_integral; // Kp=0.4, Ki=0.05
         let pi_delta = if pi_u.abs() > 0.01 {
             Some(-0.4 * pi_u)
         } else {
@@ -342,18 +343,18 @@ fn main() {
     let config = AutoConfig::from_task(task);
     let mut network = config.build_network().expect("Falha ao construir rede");
 
-    // Desliga STDP e homeostase local
-    network.set_learning_mode(LearningMode::Hebbian);
-    for neuron in &mut network.neurons {
-        neuron.homeo_eta = 0.0;
-    }
+    // Mantém STDP e homeostase local LIGADOS para permitir adaptação completa
+    // O diagnóstico funciona melhor com o sistema completo operando
+    network.set_learning_mode(LearningMode::STDP);
+    // homeo_eta já está configurado pelo AutoConfig, mantém ativo
 
-    let mut adaptive_state = AdaptiveState::with_target_fr(config.params.target_firing_rate);
+    let mut adaptive_state = AdaptiveState::new(config.clone());
 
     println!("📋 Configuração:");
     println!("  Neurônios: {}", network.num_neurons());
     println!("  Target FR: {:.4}", config.params.target_firing_rate);
-    println!("  STDP: OFF | Homeostase local: OFF\n");
+    println!("  STDP: ON | Homeostase local: ON (homeo_eta={:.3})\n",
+        network.neurons[0].homeo_eta);
 
     let target_fr = config.params.target_firing_rate;
     let total_steps = 50_000; // Reduzido para análise rápida
@@ -376,13 +377,8 @@ fn main() {
 
         network.update(&last_input);
 
-        let _adapted = monitor_and_adapt(
-            &mut network,
-            &mut adaptive_state,
-            target_fr,
-            step as i64,
-            false,
-        );
+        // Sistema adaptativo monitora e corrige
+        adaptive_state.monitor_and_adapt(&mut network);
 
         // Captura snapshot
         if (step + 1) % snapshot_interval == 0 {

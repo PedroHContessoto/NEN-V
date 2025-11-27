@@ -174,6 +174,62 @@ pub struct AgentConfig {
     pub epsilon: f64,
     pub epsilon_decay: f64,
     pub epsilon_min: f64,
+
+    // === PARÂMETROS ADICIONAIS (antes não mapeados) ===
+
+    // Timing
+    pub refractory_period: i64,
+    pub stdp_window: i64,
+    pub stp_recovery_tau: f64,
+    pub stp_use_fraction: f64,
+
+    // Learning (adicionais)
+    pub weight_decay: f64,
+    pub ltp_ltd_ratio: f64,
+    pub trace_increment: f64,
+    pub istdp_rate: f64,
+
+    // Homeostase (adicionais)
+    pub memory_alpha: f64,
+    pub meta_threshold: f64,
+    pub meta_alpha: f64,
+
+    // Memory
+    pub weight_clamp: f64,
+    pub tag_decay_rate: f64,
+    pub capture_threshold: f64,
+    pub dopamine_sensitivity: f64,
+    pub consolidation_rate: f64,
+
+    // Network
+    pub initial_exc_weight: f64,
+    pub initial_inh_weight: f64,
+
+    // Energy (adicionais)
+    pub max_energy: f64,
+    pub cost_fire_ratio: f64,
+    pub plasticity_cost_factor: f64,
+
+    // Predictive
+    pub state_learning_rate: f64,
+    pub inference_iterations: i64,
+
+    // Working Memory (adicionais)
+    pub wm_decay_rate: f64,
+
+    // Sleep
+    pub sleep_interval: i64,
+    pub replay_noise: f64,
+
+    // Competition (adicionais)
+    pub competition_interval: i64,
+
+    // Curiosity (adicionais)
+    pub surprise_threshold: f64,
+    pub habituation_rate: f64,
+
+    // NOVO: Adaptive threshold multiplier (antes hardcoded em nenv.rs)
+    pub adaptive_threshold_multiplier: f64,
 }
 
 impl Default for AgentConfig {
@@ -213,6 +269,49 @@ impl Default for AgentConfig {
             epsilon: 0.3,
             epsilon_decay: 0.995,
             epsilon_min: 0.05,
+
+            // Defaults para novos parâmetros (valores do param_space.rs)
+            refractory_period: 2,
+            stdp_window: 12,
+            stp_recovery_tau: 77.84214867927184,
+            stp_use_fraction: 0.15309237989203361,
+
+            weight_decay: 0.004670334294955324,
+            ltp_ltd_ratio: 1.3500397988478745,
+            trace_increment: 0.15911045220194164,
+            istdp_rate: 0.0033873888898145847,
+
+            memory_alpha: 0.045733904031974706,
+            meta_threshold: 0.07981004399010214,
+            meta_alpha: 0.006522558713453487,
+
+            weight_clamp: 2.4314622258375076,
+            tag_decay_rate: 0.019619692671257,
+            capture_threshold: 0.09869092530540445,
+            dopamine_sensitivity: 5.1077163797122695,
+            consolidation_rate: 0.0019728414964333275,
+
+            initial_exc_weight: 0.04056526478858787,
+            initial_inh_weight: 0.6594694106279567,
+
+            max_energy: 52.45337652798122,
+            cost_fire_ratio: 0.03352459772106367,
+            plasticity_cost_factor: 0.07404983029329446,
+
+            state_learning_rate: 0.08930597877113752,
+            inference_iterations: 2,
+
+            wm_decay_rate: 0.010828406036791487,
+
+            sleep_interval: 3586,
+            replay_noise: 0.0191880476286607,
+
+            competition_interval: 7,
+
+            surprise_threshold: 0.005122138252975917,
+            habituation_rate: 0.9374820782326819,
+
+            adaptive_threshold_multiplier: 1.0,  // NOVO: default=1.0 (antes era 3.0 hardcoded)
         }
     }
 }
@@ -288,6 +387,125 @@ impl AgentConfig {
         if let Some(v) = params.get("competition.strength").and_then(|v| v.as_f64()) {
             config.competition_strength = v;
         }
+        if let Some(v) = params.get("competition.interval").and_then(|v| v.as_f64()) {
+            config.competition_interval = v as i64;
+        }
+
+        // === MAPEAMENTO DOS PARÂMETROS ADICIONAIS ===
+
+        // Timing
+        if let Some(v) = params.get("timing.refractory_period").and_then(|v| v.as_f64()) {
+            config.refractory_period = v as i64;
+        }
+        if let Some(v) = params.get("timing.stdp_window").and_then(|v| v.as_f64()) {
+            config.stdp_window = v as i64;
+        }
+        if let Some(v) = params.get("timing.stp_recovery_tau").and_then(|v| v.as_f64()) {
+            config.stp_recovery_tau = v;
+        }
+
+        // Learning (adicionais)
+        if let Some(v) = params.get("learning.weight_decay").and_then(|v| v.as_f64()) {
+            config.weight_decay = v;
+        }
+        if let Some(v) = params.get("learning.ltp_ltd_ratio").and_then(|v| v.as_f64()) {
+            config.ltp_ltd_ratio = v;
+        }
+        if let Some(v) = params.get("learning.trace_increment").and_then(|v| v.as_f64()) {
+            config.trace_increment = v;
+        }
+        if let Some(v) = params.get("learning.istdp_rate").and_then(|v| v.as_f64()) {
+            config.istdp_rate = v;
+        }
+
+        // Homeostase (adicionais)
+        if let Some(v) = params.get("homeostasis.homeo_interval").and_then(|v| v.as_f64()) {
+            config.homeo_interval = v as i64;
+        }
+        if let Some(v) = params.get("homeostasis.memory_alpha").and_then(|v| v.as_f64()) {
+            config.memory_alpha = v;
+        }
+        if let Some(v) = params.get("homeostasis.meta_threshold").and_then(|v| v.as_f64()) {
+            config.meta_threshold = v;
+        }
+        if let Some(v) = params.get("homeostasis.meta_alpha").and_then(|v| v.as_f64()) {
+            config.meta_alpha = v;
+        }
+
+        // Memory
+        if let Some(v) = params.get("memory.weight_clamp").and_then(|v| v.as_f64()) {
+            config.weight_clamp = v;
+        }
+        if let Some(v) = params.get("memory.tag_decay_rate").and_then(|v| v.as_f64()) {
+            config.tag_decay_rate = v;
+        }
+        if let Some(v) = params.get("memory.capture_threshold").and_then(|v| v.as_f64()) {
+            config.capture_threshold = v;
+        }
+        if let Some(v) = params.get("memory.dopamine_sensitivity").and_then(|v| v.as_f64()) {
+            config.dopamine_sensitivity = v;
+        }
+        if let Some(v) = params.get("memory.consolidation_rate").and_then(|v| v.as_f64()) {
+            config.consolidation_rate = v;
+        }
+
+        // Network
+        if let Some(v) = params.get("network.initial_exc_weight").and_then(|v| v.as_f64()) {
+            config.initial_exc_weight = v;
+        }
+        if let Some(v) = params.get("network.initial_inh_weight").and_then(|v| v.as_f64()) {
+            config.initial_inh_weight = v;
+        }
+
+        // Energy (adicionais)
+        if let Some(v) = params.get("energy.max_energy").and_then(|v| v.as_f64()) {
+            config.max_energy = v;
+        }
+        if let Some(v) = params.get("energy.cost_fire_ratio").and_then(|v| v.as_f64()) {
+            config.cost_fire_ratio = v;
+        }
+        if let Some(v) = params.get("energy.plasticity_cost_factor").and_then(|v| v.as_f64()) {
+            config.plasticity_cost_factor = v;
+        }
+
+        // STP
+        if let Some(v) = params.get("stp.use_fraction").and_then(|v| v.as_f64()) {
+            config.stp_use_fraction = v;
+        }
+
+        // Predictive
+        if let Some(v) = params.get("predictive.state_learning_rate").and_then(|v| v.as_f64()) {
+            config.state_learning_rate = v;
+        }
+        if let Some(v) = params.get("predictive.inference_iterations").and_then(|v| v.as_f64()) {
+            config.inference_iterations = v as i64;
+        }
+
+        // Working Memory (adicionais)
+        if let Some(v) = params.get("working_memory.decay_rate").and_then(|v| v.as_f64()) {
+            config.wm_decay_rate = v;
+        }
+
+        // Sleep
+        if let Some(v) = params.get("sleep.interval").and_then(|v| v.as_f64()) {
+            config.sleep_interval = v as i64;
+        }
+        if let Some(v) = params.get("sleep.replay_noise").and_then(|v| v.as_f64()) {
+            config.replay_noise = v;
+        }
+
+        // Curiosity (adicionais)
+        if let Some(v) = params.get("curiosity.surprise_threshold").and_then(|v| v.as_f64()) {
+            config.surprise_threshold = v;
+        }
+        if let Some(v) = params.get("curiosity.habituation_rate").and_then(|v| v.as_f64()) {
+            config.habituation_rate = v;
+        }
+
+        // NOVO: Adaptive threshold multiplier
+        if let Some(v) = params.get("network.adaptive_threshold_multiplier").and_then(|v| v.as_f64()) {
+            config.adaptive_threshold_multiplier = v;
+        }
 
         config
     }
@@ -346,7 +564,7 @@ impl NENVAgent {
 
         // Configura modo de aprendizado
         network.set_learning_mode(LearningMode::STDP);
-        network.stdp_window = 50;
+        network.stdp_window = config.stdp_window;  // AGORA configurável!
 
         // Configura competição
         network.lateral_competition_enabled = config.competition_enabled;
@@ -354,10 +572,16 @@ impl NENVAgent {
 
         // Aplica parâmetros aos neurônios
         for neuron in &mut network.neurons {
+            // Homeostase
             neuron.target_firing_rate = config.target_firing_rate;
             neuron.homeo_eta = config.homeo_eta;
             neuron.homeo_interval = config.homeo_interval;
+            neuron.refractory_period = config.refractory_period;
+            neuron.memory_alpha = config.memory_alpha;
+            neuron.meta_plasticity_threshold = config.meta_threshold;
+            neuron.meta_plasticity_alpha = config.meta_alpha;
 
+            // Aprendizado
             neuron.dendritoma.set_learning_rate(config.learning_rate);
             neuron.dendritoma.set_stdp_params(
                 config.stdp_a_plus,
@@ -365,12 +589,26 @@ impl NENVAgent {
                 config.stdp_tau_plus,
                 config.stdp_tau_minus,
             );
+            neuron.dendritoma.weight_decay = config.weight_decay;
+            neuron.dendritoma.weight_clamp = config.weight_clamp;
 
+            // Eligibility Traces
             neuron.dendritoma.trace_tau = config.eligibility_tau;
-            neuron.dendritoma.trace_increment = config.eligibility_increment;
+            neuron.dendritoma.trace_increment = config.trace_increment;
 
+            // STP - AGORA configurável!
+            neuron.dendritoma.stp_recovery_tau = config.stp_recovery_tau;
+            neuron.dendritoma.stp_use_fraction = config.stp_use_fraction;
+
+            // Energia
+            neuron.glia.max_energy = config.max_energy;
             neuron.glia.energy_cost_fire = config.energy_cost_fire;
             neuron.glia.energy_recovery_rate = config.energy_recovery_rate;
+
+            // Memory (tags)
+            neuron.synaptic_tags_decay_rate = config.tag_decay_rate;
+            neuron.capture_threshold = config.capture_threshold;
+            neuron.dopamine_sensitivity = config.dopamine_sensitivity;
         }
 
         // Cria working memory

@@ -36,6 +36,22 @@ path = "examples/rl_agent.rs"
 name = "curiosity_exploration"
 path = "examples/curiosity_exploration.rs"
 
+[[example]]
+name = "test_input_propagation"
+path = "examples/test_input_propagation.rs"
+
+[[example]]
+name = "diagnose_network_death"
+path = "examples/diagnose_network_death.rs"
+
+[[example]]
+name = "weight_decay_experiment"
+path = "examples/weight_decay_experiment.rs"
+
+[[example]]
+name = "deep_flow_analysis"
+path = "examples/deep_flow_analysis.rs"
+
 [[bin]]
 name = "realtime_sim"
 path = "simulations/realtime_environment/main.rs"
@@ -51,6 +67,10 @@ path = "simulations/adaptive_learning/experiment_c_learning.rs"
 [[bin]]
 name = "adaptive_learning"
 path = "simulations/adaptive_learning/main.rs"
+
+[[bin]]
+name = "deep_diagnostic"
+path = "simulations/adaptive_learning/deep_diagnostic.rs"
 
 [profile.release]
 opt-level = 3

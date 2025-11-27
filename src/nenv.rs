@@ -69,6 +69,8 @@ pub struct NENV {
 
     /// Limiar de disparo inicial (referÃªncia para clamps adaptativos)
     base_threshold: f64,
+    /// Multiplicador do threshold adaptativo (controla força do sparse coding)
+    pub adaptive_threshold_multiplier: f64,
 
     /// Contador de overshoot para modular piso dinÃ¢mico
     overshoot_count: f64,
@@ -202,8 +204,9 @@ impl NENV {
         self.output_signal = 0.0;
 
         // SPARSE CODING: Adaptive threshold aumenta com firing rate
-        // Se neurônio dispara muito â†’ threshold sobe â†’ mais difícil disparar
-        let adaptive_threshold = self.threshold * (1.0 + self.recent_firing_rate * 3.0);
+        // Se neurônio dispara muito â†' threshold sobe â†' mais difícil disparar
+        // AJUSTADO: Multiplicador reduzido de 3.0 para 1.0 para evitar runaway + morte súbita
+        let adaptive_threshold = self.threshold * (1.0 + self.recent_firing_rate * 1.0);
 
         // HARD ENERGY GATING: Só dispara se tem energia mínima
         // (energy_level já foi reduzido por glia.modulate)

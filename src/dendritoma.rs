@@ -135,7 +135,7 @@ impl Dendritoma {
 
             // Short-Term Plasticity v2.0
             synaptic_resources,
-            stp_recovery_tau: 150.0,  // ~150ms para recuperação
+            stp_recovery_tau: 77.84214867927184,   // OTIMIZADO via hyperparameter_search (range: 50-300)
             stp_use_fraction: 0.15,   // 15% dos recursos por spike
             stp_facilitation,
             stp_facilitation_decay: 0.95,
@@ -452,8 +452,16 @@ impl Dendritoma {
             }
         };
 
-        // Aplica mudança
-        self.weights[pre_neuron_id] += weight_change;
+        // Aplica mudança com soft saturation para prevenir runaway LTP
+        if weight_change > 0.0 {
+            // LTP: aplica soft cap baseado em proximidade do weight_clamp
+            let saturation_factor = 1.0 - (self.weights[pre_neuron_id] / self.weight_clamp);
+            let adjusted_change = weight_change * saturation_factor.max(0.1); // Mínimo 10% do ganho
+            self.weights[pre_neuron_id] += adjusted_change;
+        } else {
+            // LTD: sem soft cap (queremos que funcione normalmente)
+            self.weights[pre_neuron_id] += weight_change;
+        }
 
         // SYNAPTIC TAGGING
         let magnitude = weight_change.abs();
