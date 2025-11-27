@@ -1,4 +1,4 @@
-/// Módulo que implementa o neurónio NENV (Neurónio-Entrada-Núcleo-Vasos)
+﻿/// Módulo que implementa o neurónio NENV (Neurónio-Entrada-Núcleo-Vasos)
 ///
 /// O NENV é a unidade central da arquitetura, integrando o Dendritoma (entrada),
 /// a Glia (modulação metabólica) e memória contextual.
@@ -152,6 +152,7 @@ impl NENV {
             spike_history: VecDeque::with_capacity(10),
             threshold: initial_threshold,
             base_threshold: initial_threshold,
+            adaptive_threshold_multiplier: 1.0,  // Default otimizado (antes era 3.0)
             overshoot_count: 0.0,
             is_firing: false,
             spike_origin: SpikeOrigin::None,
@@ -206,7 +207,7 @@ impl NENV {
         // SPARSE CODING: Adaptive threshold aumenta com firing rate
         // Se neurônio dispara muito â†' threshold sobe â†' mais difícil disparar
         // AJUSTADO: Multiplicador reduzido de 3.0 para 1.0 para evitar runaway + morte súbita
-        let adaptive_threshold = self.threshold * (1.0 + self.recent_firing_rate * 1.0);
+        let adaptive_threshold = self.threshold * (1.0 + self.recent_firing_rate * self.adaptive_threshold_multiplier);
 
         // HARD ENERGY GATING: Só dispara se tem energia mínima
         // (energy_level já foi reduzido por glia.modulate)

@@ -609,6 +609,9 @@ impl NENVAgent {
             neuron.synaptic_tags_decay_rate = config.tag_decay_rate;
             neuron.capture_threshold = config.capture_threshold;
             neuron.dopamine_sensitivity = config.dopamine_sensitivity;
+
+            // NOVO: Adaptive threshold multiplier (agora otimizável!)
+            neuron.adaptive_threshold_multiplier = config.adaptive_threshold_multiplier;
         }
 
         // Cria working memory
