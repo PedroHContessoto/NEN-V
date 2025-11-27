@@ -5,16 +5,14 @@
 //! 2. Sistema adaptativo monitora e corrige problemas
 //! 3. Métricas detalhadas mostram evolução
 
-use nenv_visual_sim::autoconfig::*;
+use nenv_v2::autoconfig::*;
 
 struct SimulationMetrics {
     step: i64,
     firing_rate: f64,
     avg_energy: f64,
-    num_adaptations: usize,
+    num_interventions: usize,
     avg_weight: f64,
-    cooldown: i64,
-    stable_steps: i64,
 }
 
 fn main() {
@@ -59,18 +57,17 @@ fn main() {
     let target_fr = config.params.target_firing_rate;
 
     // IMPORTANTE: Cria adaptive alinhado com o target do AutoConfig
-    let mut adaptive_state = adaptive_state_from_config(target_fr);
+    let mut adaptive_state = AdaptiveState::new(config.clone());
 
     println!("🎯 Alinhamento de Targets (Científico):");
     println!("  • AutoConfig target FR: {:.4}", target_fr);
     println!("  • Adaptive target FR: {:.4}", target_fr);
     println!("  • NENV target FR: {:.4} (alinhado via build)", target_fr);
-    println!("\n🔧 Controlador PI (Teoria de Controle):");
-    println!("  • Kp (proporcional): 0.60");
-    println!("  • Ki (integral): 0.005");
-    println!("  • Anti-windup: ±0.5");
-    println!("  • Deadzone: ±0.01 (histerese)");
-    println!("  • Ganho para threshold: 0.4\n");
+    println!("\n🔧 Sistema Adaptativo (Correção Automática):");
+    println!("  • Detecção: Dead network, runaway, under/over firing");
+    println!("  • Correções: Threshold, learning rate, energy recovery");
+    println!("  • Cooldown: {} steps entre intervenções", adaptive_state.intervention_cooldown);
+    println!("  • Histórico: {} métricas registradas\n", adaptive_state.fr_history.capacity());
 
     // ========================================================================
     // FASE 2: Treinamento com Sistema Adaptativo
@@ -101,13 +98,7 @@ fn main() {
         network.update(&inputs);
 
         // Sistema adaptativo monitora e corrige
-        let adapted = monitor_and_adapt(
-            &mut network,
-            &mut adaptive_state,
-            target_fr,
-            step,
-            false, // não verbose (muita saída)
-        );
+        adaptive_state.monitor_and_adapt(&mut network);
 
         // Coleta métricas
         let firing_rate = network.num_firing() as f64 / network.num_neurons() as f64;
@@ -122,25 +113,21 @@ fn main() {
             step,
             firing_rate,
             avg_energy,
-            num_adaptations: adaptive_state.adaptation_count(),
+            num_interventions: adaptive_state.actions_taken.len(),
             avg_weight,
-            cooldown: adaptive_state.adaptation_cooldown,
-            stable_steps: adaptive_state.stable_steps,
         });
 
         // Relatório periódico
         if step - last_report_step >= REPORT_INTERVAL {
-            print_progress_report(step, &metrics_history, last_report_step as usize, target_fr, adapted);
+            print_progress_report(step, &metrics_history, last_report_step as usize, target_fr);
             last_report_step = step;
         }
 
-        // Ciclos de sono (consolidação com avaliação)
+        // Ciclos de sono (consolidação)
         if step > 0 && step % (config.params.sleep.sleep_interval as i64) == 0 {
-            // Snapshot antes do sono
             let pre_sleep_fr = network.num_firing() as f64 / network.num_neurons() as f64;
-            adaptive_state.pre_sleep_snapshot(pre_sleep_fr);
 
-            println!("\n  😴 Ciclo de sono {} (FR pré={:.4})...", adaptive_state.sleep_cycles + 1, pre_sleep_fr);
+            println!("\n  😴 Ciclo de sono (FR pré={:.4})...", pre_sleep_fr);
 
             network.enter_sleep(
                 config.params.sleep.sleep_replay_noise,
@@ -154,16 +141,8 @@ fn main() {
 
             network.wake_up();
 
-            // Avalia resultado
             let post_sleep_fr = network.num_firing() as f64 / network.num_neurons() as f64;
-            let outcome = adaptive_state.evaluate_sleep_outcome(post_sleep_fr);
-
-            match outcome {
-                SleepOutcome::Improved => println!("  ✅ Acordou - Performance MELHOROU (FR pós={:.4})\n", post_sleep_fr),
-                SleepOutcome::Worsened => println!("  ⚠️  Acordou - Performance PIOROU (FR pós={:.4})\n", post_sleep_fr),
-                SleepOutcome::Neutral => println!("  ✅ Acordou - Sem mudança significativa (FR pós={:.4})\n", post_sleep_fr),
-                SleepOutcome::NoData => println!("  ✅ Acordou (FR pós={:.4})\n", post_sleep_fr),
-            }
+            println!("  ✅ Acordou (FR pós={:.4})\n", post_sleep_fr);
         }
     }
 
@@ -183,7 +162,6 @@ fn print_progress_report(
     metrics: &[SimulationMetrics],
     start_idx: usize,
     target_fr: f64,
-    _adapted: bool,
 ) {
     let recent_metrics: Vec<_> = metrics.iter()
         .skip(start_idx)
@@ -202,35 +180,31 @@ fn print_progress_report(
         .sum::<f64>() / recent_metrics.len() as f64;
 
     let last_metric = recent_metrics.last().unwrap();
-    let total_adaptations = last_metric.num_adaptations;
-    let cooldown = last_metric.cooldown;
-    let stable = last_metric.stable_steps;
+    let total_interventions = last_metric.num_interventions;
 
     let fr_error = ((avg_fr - target_fr) / target_fr * 100.0).abs();
 
-    println!("📊 Step {:5}: FR={:.4} (erro {:>5.1}%), E={:>4.1}, Adapt={:>4}, CD={:>5}, Stable={:>4}",
+    println!("📊 Step {:5}: FR={:.4} (erro {:>5.1}%), E={:>4.1}, Intervenções={:>4}",
         step,
         avg_fr,
         fr_error,
         avg_energy,
-        total_adaptations,
-        cooldown,
-        stable
+        total_interventions
     );
 }
 
 fn analyze_training_results(
     metrics: &[SimulationMetrics],
     target_fr: f64,
-    config: &AutoConfig,
+    _config: &AutoConfig,
 ) {
     // Divide em janelas
     let window_size = 40000; // 10x maior
     let num_windows = metrics.len() / window_size;
 
     println!("📈 Evolução por Janela ({} steps):", window_size);
-    println!("  {:>6} | {:>8} | {:>9} | {:>8} | {:>11}", "Window", "Avg FR", "FR Erro", "Energia", "Adaptações");
-    println!("  {}", "-".repeat(60));
+    println!("  {:>6} | {:>8} | {:>9} | {:>8} | {:>13}", "Window", "Avg FR", "FR Erro", "Energia", "Intervenções");
+    println!("  {}", "-".repeat(62));
 
     for w in 0..num_windows {
         let start = w * window_size;
@@ -240,14 +214,14 @@ fn analyze_training_results(
         let avg_fr: f64 = window.iter().map(|m| m.firing_rate).sum::<f64>() / window.len() as f64;
         let fr_error = ((avg_fr - target_fr) / target_fr * 100.0).abs();
         let avg_energy: f64 = window.iter().map(|m| m.avg_energy).sum::<f64>() / window.len() as f64;
-        let adaptations = window.last().unwrap().num_adaptations;
+        let interventions = window.last().unwrap().num_interventions;
 
-        println!("  {:6} | {:8.4} | {:8.1}% | {:8.1} | {:11}",
+        println!("  {:6} | {:8.4} | {:8.1}% | {:8.1} | {:13}",
             w + 1,
             avg_fr,
             fr_error,
             avg_energy,
-            adaptations
+            interventions
         );
     }
 
@@ -262,13 +236,11 @@ fn analyze_training_results(
     println!("  • Energia Média: {:.1}", final_energy);
 
     let last_m = metrics.last().unwrap();
-    println!("  • Total de Adaptações: {}", last_m.num_adaptations);
-    println!("  • Cooldown Final: {} steps", last_m.cooldown);
-    println!("  • Steps Estáveis: {}", last_m.stable_steps);
+    println!("  • Total de Intervenções: {}", last_m.num_interventions);
 
-    // Taxa de adaptação (adaptações por 1000 steps)
-    let adapt_rate = (last_m.num_adaptations as f64 / metrics.len() as f64) * 1000.0;
-    println!("  • Taxa de Adaptação: {:.2} por 1000 steps", adapt_rate);
+    // Taxa de intervenção (intervenções por 1000 steps)
+    let intervention_rate = (last_m.num_interventions as f64 / metrics.len() as f64) * 1000.0;
+    println!("  • Taxa de Intervenção: {:.2} por 1000 steps", intervention_rate);
 
     // Avaliação
     let fr_error_final = ((final_fr - target_fr) / target_fr * 100.0).abs();
@@ -290,28 +262,27 @@ fn analyze_training_results(
         println!("  ❌ Risco de depleção energética (<40%)");
     }
 
-    if metrics.last().unwrap().num_adaptations < 5 {
-        println!("  ✅ Configuração inicial estável (poucas adaptações)");
+    if last_m.num_interventions < 5 {
+        println!("  ✅ Configuração inicial estável (poucas intervenções)");
     } else {
-        println!("  ⚠️  Sistema adaptativo foi necessário ({} adaptações)",
-            metrics.last().unwrap().num_adaptations);
+        println!("  ⚠️  Sistema adaptativo interveio {} vezes", last_m.num_interventions);
     }
 
-    println!("\n💡 Análise do Sistema Adaptativo (Científico):");
-    println!("  • Controlador PI manteve FR próximo do alvo biologicamente");
-    println!("  • Cooldown adaptativo reduziu intervenções desnecessárias");
-    println!("  • Histerese evitou oscilações (stable_steps tracking)");
+    println!("\n💡 Análise do Sistema Adaptativo:");
+    println!("  • Monitora: Dead network, runaway, under/over firing");
+    println!("  • Corrige: Threshold, learning rate, energy recovery");
+    println!("  • Cooldown entre intervenções evita thrashing");
 
-    if adapt_rate < 5.0 {
-        println!("  ✅ Sistema ESTÁVEL: <5 adaptações/1000 steps (thrash eliminado)");
-    } else if adapt_rate < 20.0 {
-        println!("  ⚠️  Sistema MODERADO: 5-20 adaptações/1000 steps");
+    if intervention_rate < 5.0 {
+        println!("  ✅ Sistema ESTÁVEL: <5 intervenções/1000 steps");
+    } else if intervention_rate < 20.0 {
+        println!("  ⚠️  Sistema MODERADO: 5-20 intervenções/1000 steps");
     } else {
-        println!("  ❌ Sistema INSTÁVEL: >20 adaptações/1000 steps (precisa ajuste)");
+        println!("  ❌ Sistema INSTÁVEL: >20 intervenções/1000 steps (precisa ajuste)");
     }
 
-    println!("\n🔬 Alinhamento Científico:");
-    println!("  • Homeostase local (NENV) + Controle global (PI) = Coerentes");
+    println!("\n🔬 AutoConfig + Sistema Adaptativo:");
+    println!("  • AutoConfig deriva parâmetros iniciais da tarefa");
+    println!("  • Sistema adaptativo corrige desvios durante execução");
     println!("  • Target FR único: {:.4} (sem conflitos)", target_fr);
-    println!("  • Balanço energético sustentável ao longo do tempo");
 }

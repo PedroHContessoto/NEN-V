@@ -5,8 +5,8 @@
 //! - Fase 2 (20k-60k): Padrão repetido (80%) + ruído (20%)
 //! - Fase 3 (60k-80k): Ruído (washout)
 
-use nenv_visual_sim::autoconfig::{AutoConfig, RewardDensity, TaskSpec, TaskType};
-use nenv_visual_sim::network::LearningMode;
+use nenv_v2::autoconfig::{AutoConfig, RewardDensity, TaskSpec, TaskType};
+use nenv_v2::network::LearningMode;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use std::fs::File;

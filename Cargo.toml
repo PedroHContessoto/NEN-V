@@ -44,6 +44,14 @@ path = "simulations/realtime_environment/main.rs"
 name = "hyperopt"
 path = "experiments/hyperparameter_search/main.rs"
 
+[[bin]]
+name = "experiment_c_learning"
+path = "simulations/adaptive_learning/experiment_c_learning.rs"
+
+[[bin]]
+name = "adaptive_learning"
+path = "simulations/adaptive_learning/main.rs"
+
 [profile.release]
 opt-level = 3
 lto = true

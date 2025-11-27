@@ -86,11 +86,24 @@ pub fn compute_learning_rate(avg_connections: usize) -> f64 {
     base_lr.clamp(0.002, 0.08)
 }
 
-pub fn compute_initial_weights(inhibitory_ratio: f64, target_firing_rate: f64) -> (f64, f64) {
-    let excitatory_base = 0.06;
+pub fn compute_initial_weights(inhibitory_ratio: f64, _target_firing_rate: f64) -> (f64, f64) {
+    // Calibrado para inputs ESPARSOS (típico: 10-30% dos sensores ativos)
+    // Com input esparso, cada conexão ativa precisa contribuir mais
+    //
+    // Cenário MUITO ESPARSO (pior caso):
+    //   - 10 sensores, apenas 1 ativo por step
+    //   - Threshold ~0.15
+    //   - Queremos: 1 input × peso >= threshold
+    //   - Logo: peso >= 0.5 para robustez
+    //
+    // Usamos peso ALTO para garantir disparo mesmo com 1 único input ativo
+    let excitatory_base = 0.5;  // MUITO robusto - funciona mesmo com 1 input
+
+    // Inibição proporcional para manter balanço E/I
     let excitatory_ratio = 1.0 - inhibitory_ratio;
-    let expected_excitation = excitatory_ratio * target_firing_rate;
-    let inhibitory_base = (expected_excitation / inhibitory_ratio).clamp(0.15, 1.2);
+    let ei_balance = excitatory_ratio / inhibitory_ratio;  // ~4.0 para 20% inib
+    let inhibitory_base = (excitatory_base * ei_balance * 0.8).clamp(0.5, 2.0);
+
     (excitatory_base, inhibitory_base)
 }
 

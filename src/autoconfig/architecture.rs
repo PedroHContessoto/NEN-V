@@ -163,25 +163,33 @@ fn derive_inhibitory_ratio(task_type: &TaskType) -> f64 {
 }
 
 /// Deriva threshold inicial
+///
+/// Calibrado para inputs ESPARSOS típicos:
+/// - 10-30% dos sensores ativos por step
+/// - Valores normalizados [0, 1]
+/// - Pesos excitatórios ~0.25
+///
+/// Conta: 3 inputs ativos × 0.25 peso = 0.75 → threshold ~0.5 permite disparo
 fn derive_initial_threshold(connectivity: ConnectivityType, task_type: &TaskType) -> f64 {
-    // Base depende da conectividade
+    // Base calibrada para inputs esparsos com pesos ~0.25
+    // Queremos que 2-4 inputs ativos consigam disparar
     let base_threshold = match connectivity {
-        ConnectivityType::FullyConnected => 0.3,   // Mais inputs = threshold maior
-        ConnectivityType::Grid2D => 0.15,          // Menos inputs = threshold menor
-        ConnectivityType::Isolated => 0.5,         // Debug
+        ConnectivityType::FullyConnected => 0.20,  // 2 inputs × 0.25 = 0.50 > 0.20 ✓
+        ConnectivityType::Grid2D => 0.12,          // Vizinhança local, menos inputs
+        ConnectivityType::Isolated => 0.3,         // Debug
     };
 
-    // Multiplica por fator da tarefa
+    // Ajuste fino por tarefa
     let task_multiplier = match task_type {
         TaskType::ReinforcementLearning { reward_density, .. } => {
             match reward_density {
-                RewardDensity::Sparse => 0.9,   // Mais sensível para reward esparso
-                RewardDensity::Dense => 1.1,   // Menos sensível
+                RewardDensity::Sparse => 0.85,   // Mais sensível para reward esparso
+                RewardDensity::Dense => 1.1,    // Menos sensível
                 _ => 1.0,
             }
         }
-        TaskType::SupervisedClassification { .. } => 1.3,  // Mais seletivo
-        TaskType::AssociativeMemory { .. } => 0.8,         // Menos seletivo para padrões
+        TaskType::SupervisedClassification { .. } => 1.2,  // Mais seletivo
+        TaskType::AssociativeMemory { .. } => 0.9,         // Menos seletivo para padrões
     };
 
     base_threshold * task_multiplier
