@@ -764,6 +764,10 @@ impl Dendritoma {
         self.weight_decay = decay.clamp(0.0, 1.0);
     }
 
+    pub fn set_tag_decay_rate(&mut self, rate: f64) {
+        self.tag_decay_rate = rate.clamp(0.0, 1.0);
+    }
+
     pub fn set_plasticity_gain(&mut self, gain: f64) {
         self.plasticity_gain = gain.clamp(0.0, 2.0);
     }

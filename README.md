@@ -336,6 +336,126 @@ cargo run --release --bin realtime_sim -- --benchmark
 └──────────────────────────────────────────┘
 ```
 
+## ⚙️ Arquitetura de Parâmetros
+
+O NEN-V utiliza uma arquitetura de configuração em **3 níveis hierárquicos**, permitindo desde uso simples até otimização avançada:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                        HIERARQUIA DE CONFIGURAÇÃO                                │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│  ┌────────────────────────────────────────────────────────────────────────────┐ │
+│  │  NÍVEL 3: HYPERPARAMETER SEARCH (experiments/hyperparameter_search/)       │ │
+│  │  ├── 45+ parâmetros otimizáveis via Bayesian/Evolutionary/Random search   │ │
+│  │  ├── Busca automatizada com early stopping                                 │ │
+│  │  └── Benchmarks integrados para avaliação                                  │ │
+│  └────────────────────────────────────────────────────────────────────────────┘ │
+│                                      │                                           │
+│                                      ▼                                           │
+│  ┌────────────────────────────────────────────────────────────────────────────┐ │
+│  │  NÍVEL 2: AUTOCONFIG (src/autoconfig/)                                     │ │
+│  │  ├── Deriva automaticamente 80+ parâmetros a partir de TaskSpec           │ │
+│  │  ├── Otimizado via grid-search para casos comuns                          │ │
+│  │  └── Recomendado para maioria dos usos                                    │ │
+│  └────────────────────────────────────────────────────────────────────────────┘ │
+│                                      │                                           │
+│                                      ▼                                           │
+│  ┌────────────────────────────────────────────────────────────────────────────┐ │
+│  │  NÍVEL 1: HARDCODE (Proteção contra instabilidade)                        │ │
+│  │  ├── Pisos mínimos de pesos e recursos (evita morte sináptica)            │ │
+│  │  ├── Limites de mudança por update (evita runaway LTP/LTD)                │ │
+│  │  └── Mecanismos de resgate (recupera de estados degenerados)              │ │
+│  └────────────────────────────────────────────────────────────────────────────┘ │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Nível 1: Constantes de Proteção (Hardcoded)
+
+Valores de segurança que **não devem ser alterados** sem profundo entendimento do sistema:
+
+| Constante | Valor | Localização | Propósito |
+|-----------|-------|-------------|-----------|
+| `min_weight` | 0.02 | `dendritoma.rs` | Piso de peso sináptico - evita morte sináptica |
+| `min_resources` | 0.2 | `dendritoma.rs` | Piso de recursos STP - garante transmissão basal |
+| `max_change_per_update` | 0.05 | `dendritoma.rs` | Limite de mudança STDP - evita runaway LTP/LTD |
+| `rescue_factor` | 0.1 | `dendritoma.rs` | Fator de resgate - protege pesos durante inatividade |
+| `min_threshold` (dead) | 0.001 | `nenv.rs` | Piso absoluto de threshold quando neurônio está morto |
+
+### Nível 2: AutoConfig (Derivação Automática)
+
+O sistema AutoConfig deriva **80+ parâmetros** automaticamente a partir de uma especificação mínima:
+
+```rust
+let task = TaskSpec {
+    num_sensors: 8,
+    num_actuators: 4,
+    task_type: TaskType::ReinforcementLearning {
+        reward_density: RewardDensity::Sparse,
+        temporal_horizon: Some(100),
+    },
+};
+
+let config = AutoConfig::from_task(task);
+let network = config.build_network().expect("OK");
+```
+
+**Parâmetros Derivados por Categoria:**
+
+| Categoria | Parâmetros | Derivados de |
+|-----------|------------|--------------|
+| **Arquitetura** | total_neurons, hidden_layers, connectivity | num_sensors, num_actuators |
+| **Threshold** | initial_threshold (0.20) | connectivity, task_type |
+| **Pesos** | excitatory (0.5), inhibitory (1.6) | inhibitory_ratio, target_FR |
+| **STDP** | tau_plus (12.8), tau_minus (4.8), a_plus, a_minus | connectivity, learning_rate |
+| **Homeostase** | target_firing_rate (0.22), homeo_eta (0.16) | total_neurons |
+| **Eligibility** | trace_tau, trace_increment, enabled | reward_density, temporal_horizon |
+| **STP** | recovery_tau, use_fraction | temporal_horizon |
+| **Curiosidade** | scale, habituation_rate | reward_density |
+
+### Nível 3: Hyperparameter Search (Otimização Avançada)
+
+Para maximizar desempenho em tarefas específicas, use o sistema de otimização:
+
+**Parâmetros Otimizáveis por Importância:**
+
+| Importância | Parâmetro | Range | Descrição |
+|-------------|-----------|-------|-----------|
+| **0.95** | `learning.base_learning_rate` | [0.001, 0.1] | Taxa base de aprendizado |
+| **0.90** | `timing.stdp_window` | [10, 100] | Janela temporal STDP |
+| **0.90** | `homeostasis.target_firing_rate` | [0.03, 0.25] | Taxa de disparo alvo |
+| **0.90** | `learning.stdp_a_plus` | [0.001, 0.1] | Amplitude LTP |
+| **0.90** | `learning.stdp_a_minus` | [0.001, 0.1] | Amplitude LTD |
+| **0.85** | `timing.stdp_tau_plus` | [10, 100] | Constante tempo LTP |
+| **0.85** | `timing.stdp_tau_minus` | [5, 50] | Constante tempo LTD |
+| **0.85** | `homeostasis.homeo_eta` | [0.01, 0.5] | Taxa ajuste homeostático |
+| **0.85** | `network.adaptive_threshold_multiplier` | [0.5, 5.0] | Força do sparse coding |
+| **0.80** | `network.inhibitory_ratio` | [0.1, 0.4] | Razão E/I |
+
+### Workflow Recomendado
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 1. Comece com AutoConfig para sua tarefa                        │
+│    └── config = AutoConfig::from_task(task)                     │
+├─────────────────────────────────────────────────────────────────┤
+│ 2. Teste com deep_diagnostic para verificar estabilidade        │
+│    └── cargo run --release --bin deep_diagnostic                │
+├─────────────────────────────────────────────────────────────────┤
+│ 3. Se necessário, rode hyperopt para otimizar                   │
+│    └── cargo run --release --bin hyperopt -- --trials 100       │
+├─────────────────────────────────────────────────────────────────┤
+│ 4. Atualize derivation.rs com melhores parâmetros encontrados   │
+│    └── src/autoconfig/derivation.rs                             │
+├─────────────────────────────────────────────────────────────────┤
+│ 5. Ou faça override manual após build_network()                 │
+│    └── neuron.homeo_eta = 0.25;                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## 🔬 Otimização de Hiperparâmetros
 
 Sistema completo de busca inteligente com 45+ parâmetros otimizáveis:
@@ -388,6 +508,115 @@ cargo run --release --bin hyperopt -- --help
 │ Total: 45 parameters                                        │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+## 🔍 Ferramentas de Diagnóstico
+
+O NEN-V inclui ferramentas para monitorar e diagnosticar o comportamento da rede:
+
+### Deep Diagnostic
+
+Análise completa do estado interno da rede ao longo do tempo:
+
+```bash
+cargo run --release --bin deep_diagnostic
+```
+
+**Output:**
+
+```
+══════════════════════════════════════════════════════════════════════════════
+                    DEEP DIAGNOSTIC - NEN-V NETWORK ANALYSIS
+══════════════════════════════════════════════════════════════════════════════
+
+📊 SNAPSHOT @ Step 10000
+├── 🔥 ATIVIDADE
+│   ├── Firing Rate: 8.50%
+│   ├── Neurons Firing: 17/200
+│   └── Recent Activity: 0.085
+│
+├── ⚡ THRESHOLD
+│   ├── Mean: 0.1523  Std: 0.0234
+│   └── Range: [0.0892, 0.2341]
+│
+├── 🔗 SINAPSES
+│   ├── Weight Mean: 0.4521  Std: 0.1234
+│   ├── Dead Synapses: 0 (0.00%)
+│   └── Saturated: 12 (0.60%)
+│
+├── 🔋 ENERGIA
+│   ├── Mean: 87.3%  Min: 45.2%
+│   └── Low Energy Neurons: 3
+│
+└── 📈 RECURSOS STP
+    ├── Mean: 0.7823
+    └── Depleted (<0.3): 5
+
+⚠️  DIAGNÓSTICO DE BLOQUEIO
+├── By Threshold: 42 (21.0%)
+├── By Refractory: 18 (9.0%)
+├── By Energy: 3 (1.5%)
+└── Total Blocked: 63 (31.5%)
+```
+
+### Adaptive Learning Simulation
+
+Testa a capacidade de aprendizado adaptativo:
+
+```bash
+cargo run --release --bin adaptive_learning
+```
+
+### Test Fire (Exemplo de Diagnóstico)
+
+Teste rápido de disparo e auto-regulação:
+
+```bash
+cargo run --release --example test_fire
+```
+
+**Output:**
+
+```
+=== TESTE DE AUTO-REGULAÇÃO ===
+Target FR: 0.2236
+
+=== SIMULACAO ===
+Step  5000: avg_FR=0.0823 | threshold=0.0412 | weight=0.4521
+Step 10000: avg_FR=0.0912 | threshold=0.0389 | weight=0.4623
+Step 15000: avg_FR=0.1234 | threshold=0.0356 | weight=0.4712
+...
+
+=== RESULTADO FINAL ===
+FR Geral: 0.1523
+Target:   0.2236
+Erro:     31.89%
+
+Teste disparo: potencial=0.2341 vs threshold=0.0892 → DISPARA
+```
+
+### Métricas Monitoradas
+
+| Categoria | Métricas | Significado |
+|-----------|----------|-------------|
+| **Atividade** | firing_rate, recent_activity | Saúde geral da rede |
+| **Threshold** | mean, std, range | Adaptação homeostática |
+| **Sinapses** | weights, dead_count, saturated | Estabilidade plástica |
+| **Energia** | avg_energy, low_count | Capacidade metabólica |
+| **STP** | resources, depleted_count | Eficácia de transmissão |
+| **Bloqueio** | by_threshold, by_refractory, by_energy | Diagnóstico de silenciamento |
+
+### Sinais de Problemas e Soluções
+
+| Sintoma | Possível Causa | Solução |
+|---------|----------------|---------|
+| FR = 0% | Pesos muito baixos | Verificar `min_weight`, aumentar `homeo_eta` |
+| FR > 50% | Threshold muito baixo | Aumentar `target_firing_rate` |
+| Dead synapses > 5% | Weight decay agressivo | Reduzir `weight_decay` |
+| Saturated > 20% | LTP runaway | Aumentar `max_change_per_update` |
+| Low energy > 30% | Atividade excessiva | Aumentar `energy_recovery_rate` |
+| Depleted STP > 30% | Input muito frequente | Aumentar `stp_recovery_tau` |
+
+---
 
 ## 🧪 Testes
 

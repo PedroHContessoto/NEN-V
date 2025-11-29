@@ -576,10 +576,10 @@ impl NENVAgent {
             neuron.target_firing_rate = config.target_firing_rate;
             neuron.homeo_eta = config.homeo_eta;
             neuron.homeo_interval = config.homeo_interval;
-            neuron.refractory_period = config.refractory_period;
-            neuron.memory_alpha = config.memory_alpha;
-            neuron.meta_plasticity_threshold = config.meta_threshold;
-            neuron.meta_plasticity_alpha = config.meta_alpha;
+            neuron.set_refractory_period(config.refractory_period);
+            neuron.set_memory_alpha(config.memory_alpha);
+            neuron.meta_threshold = config.meta_threshold;
+            neuron.meta_alpha = config.meta_alpha;
 
             // Aprendizado
             neuron.dendritoma.set_learning_rate(config.learning_rate);
@@ -589,7 +589,7 @@ impl NENVAgent {
                 config.stdp_tau_plus,
                 config.stdp_tau_minus,
             );
-            neuron.dendritoma.weight_decay = config.weight_decay;
+            neuron.dendritoma.set_weight_decay(config.weight_decay);
             neuron.dendritoma.weight_clamp = config.weight_clamp;
 
             // Eligibility Traces
@@ -605,10 +605,10 @@ impl NENVAgent {
             neuron.glia.energy_cost_fire = config.energy_cost_fire;
             neuron.glia.energy_recovery_rate = config.energy_recovery_rate;
 
-            // Memory (tags)
-            neuron.synaptic_tags_decay_rate = config.tag_decay_rate;
-            neuron.capture_threshold = config.capture_threshold;
-            neuron.dopamine_sensitivity = config.dopamine_sensitivity;
+            // Memory (tags) - campos movidos para Dendritoma
+            neuron.dendritoma.set_tag_decay_rate(config.tag_decay_rate);
+            neuron.dendritoma.capture_threshold = config.capture_threshold;
+            neuron.dendritoma.dopamine_sensitivity = config.dopamine_sensitivity;
 
             // NOVO: Adaptive threshold multiplier (agora otimizável!)
             neuron.adaptive_threshold_multiplier = config.adaptive_threshold_multiplier;
