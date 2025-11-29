@@ -405,9 +405,13 @@ impl NENV {
 
     /// Aplica plasticidade homeostática periodicamente
     ///
-    /// Implementa DOIS mecanismos biológicos simultÃ¢neos:
+    /// Implementa DOIS mecanismos biológicos simultâneos:
     /// 1. Synaptic Scaling (Peso): Ajusta "volume" das entradas
     /// 2. Intrinsic Plasticity (Threshold): Ajusta "sensibilidade" do neurônio
+    ///
+    /// CORREÇÃO: Quando neurônio está completamente silencioso (FR ~ 0),
+    /// prioriza ajuste de threshold sobre synaptic scaling para quebrar
+    /// o ciclo vicioso de morte sináptica.
     ///
     /// # Argumentos
     /// * `current_time` - Passo de tempo atual
@@ -419,7 +423,7 @@ impl NENV {
         }
         self.last_homeo_update = current_time;
 
-        // ðŸ”¥ CORREÃ‡ÃƒO: Permite homeostase mesmo sem input externo se FR for 0
+        // Permite homeostase mesmo sem input externo se FR for 0
         // (Neurônios "mortos" precisam baixar threshold para procurar sinal)
         if !has_external_input && self.recent_firing_rate > 0.01 {
             return;
@@ -438,26 +442,45 @@ impl NENV {
         let energy_weight = if energy < 0.3 { 0.3 } else { energy };
         let effective_error = rate_error * energy_weight;
 
-        // MECANISMO 1: Synaptic Scaling (proporção configurável do esforço homeostático)
-        // Ajusta os pesos para tentar compensar o erro
-        self.dendritoma.apply_synaptic_scaling(effective_error, self.homeo_eta * self.homeo_weight_ratio);
+        // CORREÇÃO: Quando neurônio está "morto" (FR < 1%), prioriza threshold
+        // sobre synaptic scaling para quebrar ciclo vicioso
+        let is_dead = self.recent_firing_rate < 0.01;
 
-        // âœ¨ MECANISMO 2: Intrinsic Plasticity (proporção configurável do esforço homeostático) âœ¨
-        // Ajusta o threshold.
-        // Se rate_error < 0 (hipoativo) â†’ threshold DEVE CAIR (ficar mais sensível)
-        // Se rate_error > 0 (hiperativo) â†’ threshold DEVE SUBIR (ficar menos sensível)
-        let threshold_delta = effective_error * self.homeo_eta * self.homeo_threshold_ratio;
+        if is_dead {
+            // Modo resgate: ajuste agressivo apenas no threshold
+            // Não mexe em pesos para evitar runaway LTP
+            let rescue_eta = self.homeo_eta * 2.0;  // Ajuste mais forte
+            let threshold_delta = effective_error * rescue_eta;
+            self.threshold += threshold_delta;
+        } else {
+            // Modo normal: ajusta ambos proporcionalmente
 
-        self.threshold += threshold_delta;
+            // MECANISMO 1: Synaptic Scaling
+            self.dendritoma.apply_synaptic_scaling(
+                effective_error,
+                self.homeo_eta * self.homeo_weight_ratio
+            );
+
+            // MECANISMO 2: Intrinsic Plasticity
+            let threshold_delta = effective_error * self.homeo_eta * self.homeo_threshold_ratio;
+            self.threshold += threshold_delta;
+        }
 
         // Clamp adaptativo: evita colapso/negativação sem matar autorregulação
         let energy_frac = self.glia.energy_fraction();
         // Overshoot aumenta o piso; decai lentamente a cada aplicação
         self.overshoot_count *= 0.99;
-        let min_threshold = (self.base_threshold * 0.02
-            + (1.0 - energy_frac) * self.base_threshold * 0.3)
-            * (1.0 + 0.1 * self.overshoot_count)
-            .max(0.001);
+
+        // CORREÇÃO: Piso muito baixo para permitir recuperação de neurônios mortos
+        let min_threshold = if is_dead {
+            0.001  // Piso mínimo absoluto quando morto
+        } else {
+            (self.base_threshold * 0.02
+                + (1.0 - energy_frac) * self.base_threshold * 0.3)
+                * (1.0 + 0.1 * self.overshoot_count)
+                .max(0.001)
+        };
+
         self.threshold = self.threshold.clamp(min_threshold, 5.0);
     }
 

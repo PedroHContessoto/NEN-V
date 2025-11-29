@@ -218,6 +218,8 @@ impl Dendritoma {
     /// - Facilitação: Inputs em sequÃªncia rápida podem ter boost temporário
     ///
     /// Isso naturalmente favorece padrões estruturados sobre ruído aleatório.
+    ///
+    /// CORREÇÃO: Piso mínimo de recursos STP para evitar silenciamento completo
     pub fn integrate(&mut self, inputs: &[f64]) -> f64 {
         assert_eq!(
             inputs.len(),
@@ -227,18 +229,24 @@ impl Dendritoma {
 
         let mut potential = 0.0;
 
+        // Piso mínimo de recursos para garantir transmissão basal
+        let min_resources = 0.2;
+
         for i in 0..self.weights.len() {
             // Peso efetivo = (STM + LTM) * recursos * facilitação
             let base_weight = self.weights[i] + self.weights_ltm[i];
-            let stp_modulation = self.synaptic_resources[i] * self.stp_facilitation[i];
+            // CORREÇÃO: Recursos nunca vão abaixo do mínimo
+            let effective_resources = self.synaptic_resources[i].max(min_resources);
+            let stp_modulation = effective_resources * self.stp_facilitation[i];
             let effective_weight = base_weight * stp_modulation;
 
             potential += inputs[i] * effective_weight;
 
             // Atualiza STP se input ativo
             if inputs[i].abs() > 0.1 {
-                // Consome recursos (depressão)
+                // Consome recursos (depressão) - respeitando piso
                 self.synaptic_resources[i] *= 1.0 - self.stp_use_fraction;
+                self.synaptic_resources[i] = self.synaptic_resources[i].max(min_resources);
 
                 // Aumenta facilitação temporariamente
                 self.stp_facilitation[i] += 0.1;
@@ -358,13 +366,31 @@ impl Dendritoma {
     }
 
     /// Aplica manutenção dos pesos (decaimento e clamp)
+    ///
+    /// CORREÇÃO: O decay agora é proporcional à atividade para evitar
+    /// que pesos morram durante períodos de inatividade (ciclo vicioso).
     pub fn apply_weight_maintenance(&mut self, recent_activity: f64) {
+        // Proteção baseada em atividade: quanto mais ativo, menos decay
         let activity_protection = 1.0 - (recent_activity * 0.9);
-        let effective_decay = self.weight_decay * activity_protection;
+
+        // NOVO: Fator de resgate - se atividade muito baixa, reduz decay drasticamente
+        // Isso evita que pesos morram quando a rede está silenciosa
+        let rescue_factor = if recent_activity < 0.01 {
+            0.1  // Apenas 10% do decay quando inativo
+        } else if recent_activity < 0.05 {
+            0.3  // 30% do decay quando pouco ativo
+        } else {
+            1.0  // Decay normal quando ativo
+        };
+
+        let effective_decay = self.weight_decay * activity_protection * rescue_factor;
+
+        // NOVO: Piso mínimo de peso para evitar morte sináptica completa
+        let min_weight = 0.02;  // Piso que permite recuperação
 
         for weight in &mut self.weights {
             *weight *= 1.0 - effective_decay;
-            *weight = weight.clamp(0.0, self.weight_clamp);
+            *weight = weight.clamp(min_weight, self.weight_clamp);
         }
 
         self.apply_ltm_protection();
@@ -453,14 +479,23 @@ impl Dendritoma {
         };
 
         // Aplica mudança com soft saturation para prevenir runaway LTP
+        // CORREÇÃO: Saturação mais agressiva e limite absoluto por update
+        let max_change_per_update = 0.05;  // Máximo 5% do peso por update
+
         if weight_change > 0.0 {
             // LTP: aplica soft cap baseado em proximidade do weight_clamp
-            let saturation_factor = 1.0 - (self.weights[pre_neuron_id] / self.weight_clamp);
-            let adjusted_change = weight_change * saturation_factor.max(0.1); // Mínimo 10% do ganho
-            self.weights[pre_neuron_id] += adjusted_change;
+            // Usa saturação quadrática para ser mais agressivo perto do limite
+            let relative_weight = self.weights[pre_neuron_id] / self.weight_clamp;
+            let saturation_factor = (1.0 - relative_weight).powi(2);  // Quadrático
+
+            let adjusted_change = weight_change * saturation_factor;
+            // Limita mudança máxima por update
+            let capped_change = adjusted_change.min(max_change_per_update);
+            self.weights[pre_neuron_id] += capped_change;
         } else {
-            // LTD: sem soft cap (queremos que funcione normalmente)
-            self.weights[pre_neuron_id] += weight_change;
+            // LTD: limita também para evitar colapso rápido
+            let capped_change = weight_change.max(-max_change_per_update);
+            self.weights[pre_neuron_id] += capped_change;
         }
 
         // SYNAPTIC TAGGING
@@ -475,11 +510,13 @@ impl Dendritoma {
             self.eligibility_trace[pre_neuron_id] = self.eligibility_trace[pre_neuron_id].min(1.0);
         }
 
-        // Decay proporcional
-        let proportional_decay = self.weights[pre_neuron_id] * 0.0001;
+        // Decay proporcional reduzido (já temos mecanismos de controle)
+        let proportional_decay = self.weights[pre_neuron_id] * 0.00005;
         self.weights[pre_neuron_id] -= proportional_decay;
 
-        self.weights[pre_neuron_id] = self.weights[pre_neuron_id].clamp(0.0, self.weight_clamp);
+        // CORREÇÃO: Usa mesmo piso mínimo que weight_maintenance
+        let min_weight = 0.02;
+        self.weights[pre_neuron_id] = self.weights[pre_neuron_id].clamp(min_weight, self.weight_clamp);
 
         true
     }
@@ -529,13 +566,16 @@ impl Dendritoma {
 
         let rate_error = post_firing_rate - self.istdp_target_rate;
 
+        let min_weight = 0.02;
+
         if pre_fired && post_fired {
             let weight_change = self.istdp_learning_rate * rate_error;
             self.weights[pre_neuron_id] += weight_change;
-            self.weights[pre_neuron_id] = self.weights[pre_neuron_id].clamp(0.0, self.weight_clamp);
+            self.weights[pre_neuron_id] = self.weights[pre_neuron_id].clamp(min_weight, self.weight_clamp);
         }
 
         self.weights[pre_neuron_id] *= 0.999;
+        self.weights[pre_neuron_id] = self.weights[pre_neuron_id].max(min_weight);
     }
 
     // ========================================================================
@@ -546,8 +586,11 @@ impl Dendritoma {
     ///
     /// Mantém a soma total dos pesos constante (orçamento sináptico),
     /// forçando competição entre sinapses.
+    ///
+    /// CORREÇÃO: Respeita piso mínimo de peso
     pub fn apply_competitive_normalization(&mut self) {
         let current_sum: f64 = self.weights.iter().sum();
+        let min_weight = 0.02;
 
         if current_sum > 0.0 && (current_sum - self.target_weight_sum).abs() > 0.01 {
             let scale = self.target_weight_sum / current_sum;
@@ -557,7 +600,7 @@ impl Dendritoma {
 
             for w in &mut self.weights {
                 *w *= smooth_scale;
-                *w = w.clamp(0.0, self.weight_clamp);
+                *w = w.clamp(min_weight, self.weight_clamp);
             }
         }
     }
@@ -566,8 +609,11 @@ impl Dendritoma {
     ///
     /// Pesos acima de um threshold são parcialmente protegidos da normalização,
     /// permitindo que "memórias" importantes sobrevivam.
+    ///
+    /// CORREÇÃO: Respeita piso mínimo de peso
     pub fn apply_competitive_normalization_with_protection(&mut self, protection_threshold: f64) {
         let current_sum: f64 = self.weights.iter().sum();
+        let min_weight = 0.02;
 
         if current_sum > 0.0 && (current_sum - self.target_weight_sum).abs() > 0.01 {
             let scale = self.target_weight_sum / current_sum;
@@ -582,7 +628,7 @@ impl Dendritoma {
 
                 let effective_scale = 1.0 + (scale - 1.0) * (1.0 - protection) * 0.3;
                 self.weights[i] *= effective_scale;
-                self.weights[i] = self.weights[i].clamp(0.0, self.weight_clamp);
+                self.weights[i] = self.weights[i].clamp(min_weight, self.weight_clamp);
             }
         }
     }
@@ -654,12 +700,18 @@ impl Dendritoma {
     // ========================================================================
 
     /// Aplica synaptic scaling homeostático
+    ///
+    /// CORREÇÃO: Respeita piso mínimo de peso para evitar morte sináptica
     pub fn apply_synaptic_scaling(&mut self, rate_error: f64, eta: f64) {
         let scale = 1.0 - eta * rate_error;
         let scale = scale.clamp(0.9, 1.1);
 
+        // Piso mínimo consistente com outras funções
+        let min_weight = 0.02;
+
         for w in &mut self.weights {
             *w *= scale;
+            *w = w.clamp(min_weight, self.weight_clamp);
         }
 
         let ltm_scale = 1.0 - (eta * 0.1) * rate_error;
@@ -667,6 +719,8 @@ impl Dendritoma {
 
         for w in &mut self.weights_ltm {
             *w *= ltm_scale;
+            // LTM pode ir a zero (não consolidado ainda)
+            *w = w.clamp(0.0, self.weight_clamp * 2.0);
         }
     }
 
