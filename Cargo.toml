@@ -61,16 +61,12 @@ name = "hyperopt"
 path = "experiments/hyperparameter_search/main.rs"
 
 [[bin]]
-name = "experiment_c_learning"
-path = "simulations/adaptive_learning/experiment_c_learning.rs"
+name = "apply_hyperopt"
+path = "experiments/hyperparameter_search/apply_hyperopt_main.rs"
 
 [[bin]]
-name = "adaptive_learning"
-path = "simulations/adaptive_learning/main.rs"
-
-[[bin]]
-name = "deep_diagnostic"
-path = "simulations/adaptive_learning/deep_diagnostic.rs"
+name = "realtime_environment"
+path = "simulations/realtime_environment/main.rs"
 
 [profile.release]
 opt-level = 3

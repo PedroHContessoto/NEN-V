@@ -2,6 +2,10 @@
 //!
 //! Contém todas as fórmulas para calcular os 80+ parâmetros da rede
 //! a partir da arquitetura e especificação da tarefa.
+//!
+//! ## Valores Otimizados por Hyperopt
+//!
+//! Parâmetros atualizados com resultados do mega_full (383 trials, Score: 0.668)
 
 use crate::network::ConnectivityType;
 use super::architecture::DerivedArchitecture;
@@ -107,29 +111,33 @@ pub fn compute_initial_weights(inhibitory_ratio: f64, _target_firing_rate: f64) 
     (excitatory_base, inhibitory_base)
 }
 
-pub fn compute_energy_params(initial_threshold: f64, target_firing_rate: f64) -> EnergyParams {
-    let max_energy = 100.0;
-    let energy_cost_fire = (initial_threshold * max_energy * 0.1).clamp(max_energy * 0.01, max_energy * 0.15);
-    let energy_cost_maintenance = (energy_cost_fire * 0.01).max(0.01);
-    let equilibrium_recovery = energy_cost_fire * target_firing_rate / (1.0 - target_firing_rate);
-    let energy_recovery_rate = (equilibrium_recovery * 1.3).clamp(1.0, 25.0);
+pub fn compute_energy_params(_initial_threshold: f64, _target_firing_rate: f64) -> EnergyParams {
+    // Valores otimizados por hyperopt (mega_full, Score: 0.668)
+    let max_energy: f64 = 52.45;
+    let energy_cost_fire: f64 = max_energy * 0.0335;  // cost_fire_ratio otimizado
+    let energy_cost_maintenance: f64 = (energy_cost_fire * 0.01).max(0.01);
+    let energy_recovery_rate: f64 = 6.12;
 
     EnergyParams {
         max_energy,
         energy_cost_fire,
         energy_cost_maintenance,
         energy_recovery_rate,
-        plasticity_energy_cost_factor: 0.08,
+        plasticity_energy_cost_factor: 0.074,
     }
 }
 
 pub fn compute_stdp_params(_connectivity: ConnectivityType, learning_rate: f64) -> STDPParams {
-    let window = 16;
-    // ASSIMÉTRICO: tau_plus > tau_minus para favorecer padrões causais
-    let tau_plus = (window as f64) * 0.8;
-    let tau_minus = (window as f64) * 0.3;
-    let a_plus = learning_rate * 2.5;
-    let a_minus = a_plus / 2.5;  // LTP/LTD ratio de 2.5:1
+    // Valores otimizados por hyperopt (mega_full, Score: 0.668)
+    let window = 12;
+    let tau_plus = 44.65;
+    let tau_minus = 18.11;
+
+    // a_plus e a_minus modulados pelo learning_rate derivado
+    // Valores base: a_plus=0.0469, a_minus=0.0485, lr_base=0.0256
+    let lr_factor = (learning_rate / 0.0256).sqrt();
+    let a_plus = 0.0469 * lr_factor;
+    let a_minus = 0.0485 * lr_factor;  // LTP/LTD ratio ~0.97 (quase simétrico)
 
     STDPParams { window, tau_plus, tau_minus, a_plus, a_minus }
 }
@@ -150,13 +158,14 @@ pub fn compute_plasticity_params() -> PlasticityParams {
 }
 
 pub fn compute_homeostatic_params(target_firing_rate: f64) -> HomeostaticParams {
+    // Valores otimizados por hyperopt (mega_full, Score: 0.668)
     HomeostaticParams {
-        refractory_period: 5,
-        memory_alpha: 0.02,
+        refractory_period: 2,      // era 5
+        memory_alpha: 0.0457,      // era 0.02
         homeo_interval: 9,
-        homeo_eta: 0.1627,  // Otimizado por grid-search
-        meta_threshold: 0.12,
-        meta_alpha: 0.005,
+        homeo_eta: 0.2314,         // era 0.1627
+        meta_threshold: 0.0798,    // era 0.12
+        meta_alpha: 0.00652,       // era 0.005
         fr_alpha: 1.0 / (1.0 / target_firing_rate).clamp(10.0, 100.0),
     }
 }
@@ -172,15 +181,16 @@ pub fn compute_input_params(
     }
 }
 
-pub fn compute_memory_params(stdp: &STDPParams, learning_rate: f64, _task: &TaskSpec) -> MemoryParams {
+pub fn compute_memory_params(stdp: &STDPParams, _learning_rate: f64, _task: &TaskSpec) -> MemoryParams {
+    // Valores otimizados por hyperopt (mega_full, Score: 0.668)
     MemoryParams {
-        weight_decay: 0.0001,
-        weight_clamp: 2.5,
-        tag_decay_rate: 0.008,
+        weight_decay: 0.00467,     // era 0.0001
+        weight_clamp: 2.43,        // era 2.5
+        tag_decay_rate: 0.0196,    // era 0.008
         tag_multiplier: 1.0,
-        capture_threshold: 0.15,
-        dopamine_sensitivity: 5.0,
-        consolidation_base_rate: learning_rate * 0.1,
+        capture_threshold: 0.0987, // era 0.15
+        dopamine_sensitivity: 5.11,// era 5.0
+        consolidation_base_rate: 0.00197,  // valor fixo otimizado
         ltm_protection: LTMProtectionParams {
             stability_threshold: 0.7,
             ltm_relevance_threshold: 0.5,
@@ -244,19 +254,21 @@ pub fn compute_rl_params(num_actuators: usize, target_firing_rate: f64, stdp: &S
     }
 }
 
-pub fn compute_eligibility_params(task: &TaskSpec, stdp: &STDPParams) -> EligibilityParams {
-    let trace_tau = (stdp.window as f64) * 8.0;
+pub fn compute_eligibility_params(task: &TaskSpec, _stdp: &STDPParams) -> EligibilityParams {
+    // Valores otimizados por hyperopt (mega_full, Score: 0.668)
+    let trace_tau = 244.24;  // era stdp.window * 8.0
 
     let trace_increment = match &task.task_type {
         TaskType::ReinforcementLearning { reward_density, .. } => {
+            // Valor base: 0.159, ajustado por reward density
             match reward_density {
-                RewardDensity::Sparse => 0.20,   // Mais forte para reward esparso
-                RewardDensity::Auto => 0.15,
-                RewardDensity::Moderate => 0.12,
-                RewardDensity::Dense => 0.10,
+                RewardDensity::Sparse => 0.159 * 1.3,   // ~0.207
+                RewardDensity::Auto => 0.159,
+                RewardDensity::Moderate => 0.159 * 0.8, // ~0.127
+                RewardDensity::Dense => 0.159 * 0.6,    // ~0.095
             }
         }
-        _ => 0.12,
+        _ => 0.159,
     };
 
     let enabled = matches!(task.task_type, TaskType::ReinforcementLearning { .. });
@@ -264,74 +276,57 @@ pub fn compute_eligibility_params(task: &TaskSpec, stdp: &STDPParams) -> Eligibi
     EligibilityParams { trace_tau, trace_increment, enabled }
 }
 
-pub fn compute_stp_params(task: &TaskSpec) -> STPParams {
-    let recovery_tau = match &task.task_type {
-        TaskType::ReinforcementLearning { temporal_horizon, .. } => {
-            match temporal_horizon {
-                Some(h) if *h > 200 => 200.0,
-                Some(h) if *h > 100 => 150.0,
-                _ => 120.0,
-            }
-        }
-        _ => 150.0,
-    };
-
+pub fn compute_stp_params(_task: &TaskSpec) -> STPParams {
+    // Valores otimizados por hyperopt (mega_full, Score: 0.668)
     STPParams {
-        recovery_tau,
-        use_fraction: 0.12,
+        recovery_tau: 77.84,   // era 120-200 dependente de task
+        use_fraction: 0.153,   // era 0.12
         enabled: true,
     }
 }
 
-pub fn compute_competition_params(task: &TaskSpec, total_neurons: usize) -> CompetitionParams {
-    let strength = if total_neurons > 50 { 0.35 }
-        else if total_neurons > 20 { 0.25 }
-        else { 0.15 };
-
-    let interval = match &task.task_type {
-        TaskType::ReinforcementLearning { .. } => 10,
-        TaskType::SupervisedClassification { .. } => 5,
-        TaskType::AssociativeMemory { .. } => 15,
-    };
+pub fn compute_competition_params(task: &TaskSpec, _total_neurons: usize) -> CompetitionParams {
+    // Valores otimizados por hyperopt (mega_full, Score: 0.668)
+    let strength = 0.221;  // era 0.15-0.35 dependente de neurons
+    let interval = 7;      // era 5-15 dependente de task
 
     let enabled = !matches!(task.task_type, TaskType::AssociativeMemory { .. });
 
     CompetitionParams { strength, interval, enabled }
 }
 
-pub fn compute_working_memory_params(total_neurons: usize) -> WorkingMemoryParams {
-    // Regra de Miller: 7 ± 2
-    let capacity = if total_neurons > 50 { 9 }
-        else if total_neurons > 20 { 7 }
-        else { 5 };
-
+pub fn compute_working_memory_params(_total_neurons: usize) -> WorkingMemoryParams {
+    // Valores otimizados por hyperopt (mega_full, Score: 0.668)
     WorkingMemoryParams {
-        capacity,
-        recurrent_strength: 0.85,
-        decay_rate: 0.02,
+        capacity: 5,                    // era 5-9 dependente de neurons
+        recurrent_strength: 0.588,      // era 0.85
+        decay_rate: 0.0108,             // era 0.02
         lateral_inhibition: 0.08,
         enabled: true,
     }
 }
 
 pub fn compute_curiosity_params(task: &TaskSpec) -> CuriosityParams {
+    // Valores otimizados por hyperopt (mega_full, Score: 0.668)
     let (curiosity_scale, enabled) = match &task.task_type {
         TaskType::ReinforcementLearning { reward_density, .. } => {
+            // Escala base: 0.0987, ajustada por reward density
+            let base_scale = 0.0987;
             let scale = match reward_density {
-                RewardDensity::Sparse => 0.2,   // Mais curiosidade para reward esparso
-                RewardDensity::Auto => 0.15,
-                RewardDensity::Moderate => 0.1,
-                RewardDensity::Dense => 0.05,
+                RewardDensity::Sparse => base_scale * 2.0,   // ~0.197
+                RewardDensity::Auto => base_scale * 1.5,     // ~0.148
+                RewardDensity::Moderate => base_scale,       // ~0.099
+                RewardDensity::Dense => base_scale * 0.5,    // ~0.049
             };
             (scale, true)
         }
-        _ => (0.1, false),
+        _ => (0.0987, false),
     };
 
     CuriosityParams {
         curiosity_scale,
-        surprise_threshold: 0.01,
-        habituation_rate: 0.995,
+        surprise_threshold: 0.00512,  // era 0.01
+        habituation_rate: 0.937,      // era 0.995
         enabled,
     }
 }
@@ -350,14 +345,19 @@ mod tests {
     }
 
     #[test]
-    fn test_asymmetric_stdp() {
+    fn test_stdp_params() {
         let stdp = compute_stdp_params(ConnectivityType::FullyConnected, 0.01);
 
-        // tau_plus > tau_minus
+        // tau_plus > tau_minus (preserva causalidade)
         assert!(stdp.tau_plus > stdp.tau_minus);
 
-        // a_plus > a_minus
-        assert!(stdp.a_plus > stdp.a_minus);
+        // a_plus e a_minus devem ser positivos
+        assert!(stdp.a_plus > 0.0);
+        assert!(stdp.a_minus > 0.0);
+
+        // Após hyperopt: LTP/LTD ratio ~0.97 (quase simétrico)
+        let ratio = stdp.a_plus / stdp.a_minus;
+        assert!(ratio > 0.8 && ratio < 1.2);
     }
 
     #[test]

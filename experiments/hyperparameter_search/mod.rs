@@ -80,6 +80,8 @@ pub mod search;
 pub mod environments;
 pub mod evaluation;
 pub mod orchestrator;
+pub mod apply_hyperopt;
+pub mod external_environments;
 
 pub use param_space::{
     ParameterSpace, ParameterDef, ParameterValue, ParameterRange,
@@ -102,4 +104,9 @@ pub use evaluation::{
 pub use orchestrator::{
     ExperimentOrchestrator, ExperimentConfig, ExperimentResult,
     TrialResult, OptimizationObjective,
+};
+pub use external_environments::{
+    GridWorldEnv, GridWorldConfig,
+    RealtimeEnv, RealtimeEnvConfig,
+    ExternalEnvironments,
 };

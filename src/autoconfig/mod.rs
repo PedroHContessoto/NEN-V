@@ -415,7 +415,7 @@ mod tests {
     }
 
     #[test]
-    fn test_asymmetric_stdp() {
+    fn test_stdp_params() {
         let task = TaskSpec {
             num_sensors: 4,
             num_actuators: 4,
@@ -424,11 +424,16 @@ mod tests {
 
         let config = AutoConfig::from_task(task);
 
-        // tau_plus > tau_minus
+        // tau_plus > tau_minus (preserva causalidade)
         assert!(config.params.stdp.tau_plus > config.params.stdp.tau_minus);
 
-        // LTP > LTD
-        assert!(config.params.stdp.a_plus > config.params.stdp.a_minus);
+        // a_plus e a_minus devem ser positivos
+        assert!(config.params.stdp.a_plus > 0.0);
+        assert!(config.params.stdp.a_minus > 0.0);
+
+        // Após hyperopt: LTP/LTD ratio ~0.97 (quase simétrico)
+        let ratio = config.params.stdp.a_plus / config.params.stdp.a_minus;
+        assert!(ratio > 0.8 && ratio < 1.2);
     }
 
     #[test]

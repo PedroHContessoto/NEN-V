@@ -23,6 +23,7 @@ mod search;
 mod environments;
 mod evaluation;
 mod orchestrator;
+mod external_environments;
 
 use std::env;
 use std::path::PathBuf;
@@ -224,6 +225,36 @@ fn print_parameter_space_summary() {
     println!("└─────────────────────────────────────────────────────────────┘");
 }
 
+fn print_benchmark_environments() {
+    use environments::EnvironmentRegistry;
+
+    let registry = EnvironmentRegistry::default_suite();
+    let specs = registry.specs();
+
+    println!("\n┌─────────────────────────────────────────────────────────────┐");
+    println!("│                  BENCHMARK ENVIRONMENTS                      │");
+    println!("├─────────────────────────────────────────────────────────────┤");
+
+    // Ambientes internos
+    println!("│ Internal Environments:                                       │");
+    for spec in specs.iter().filter(|s| !s.name.contains("GridWorld") && !s.name.contains("Realtime")) {
+        println!("│   • {:25} (weight: {:4.0}%, {} eps)     │",
+            spec.name, spec.weight * 100.0, spec.episodes);
+    }
+
+    // Ambientes externos
+    println!("├─────────────────────────────────────────────────────────────┤");
+    println!("│ External Environments (simulations/):                        │");
+    for spec in specs.iter().filter(|s| s.name.contains("GridWorld") || s.name.contains("Realtime")) {
+        println!("│   • {:25} (weight: {:4.0}%, {} eps)     │",
+            spec.name, spec.weight * 100.0, spec.episodes);
+    }
+
+    println!("├─────────────────────────────────────────────────────────────┤");
+    println!("│ Total: {:2} environments                                      │", specs.len());
+    println!("└─────────────────────────────────────────────────────────────┘");
+}
+
 fn main() {
     let cli = parse_args();
 
@@ -244,6 +275,7 @@ fn main() {
 
     if cli.verbose {
         print_parameter_space_summary();
+        print_benchmark_environments();
     }
 
     // Cria configuração do experimento

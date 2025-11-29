@@ -39,20 +39,36 @@ cargo run --release --bin hyperopt -- --strategy bayesian --trials 100
 
 # Ver todas as opções
 cargo run --release --bin hyperopt -- --help
+
+# Após rodar o hyperopt, aplique os resultados ao AutoConfig
+cargo run --release --bin apply_hyperopt
+```
+
+### Workflow Completo em 4 Passos
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  1. HYPEROPT           2. APPLY             3. REVIEW           4. TEST    │
+│  ─────────────────     ─────────────────    ─────────────────   ────────── │
+│  cargo run --bin       cargo run --bin      Copie o código      cargo test │
+│  hyperopt              apply_hyperopt       para derivation.rs  deep_diag  │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Estrutura de Arquivos
 
 ```
 hyperparameter_search/
-├── main.rs           # CLI principal e entry point
-├── mod.rs            # Módulo e re-exports
-├── param_space.rs    # Definição do espaço de parâmetros (45+)
-├── search.rs         # Algoritmos de busca (4 estratégias)
-├── environments.rs   # Ambientes de benchmark parametrizáveis
-├── evaluation.rs     # Sistema de avaliação com NEN-V real
-├── orchestrator.rs   # Coordenação de experimentos
-└── README.md         # Este arquivo
+├── main.rs                  # CLI principal do hyperopt
+├── mod.rs                   # Módulo e re-exports
+├── param_space.rs           # Definição do espaço de parâmetros (45+)
+├── search.rs                # Algoritmos de busca (4 estratégias)
+├── environments.rs          # Ambientes de benchmark parametrizáveis
+├── evaluation.rs            # Sistema de avaliação com NEN-V real
+├── orchestrator.rs          # Coordenação de experimentos
+├── apply_hyperopt.rs        # Aplicador de resultados → AutoConfig
+├── apply_hyperopt_main.rs   # CLI do apply_hyperopt
+└── README.md                # Este arquivo
 ```
 
 ## Arquitetura do Sistema
@@ -72,14 +88,55 @@ pub struct NENVAgent {
 
 ### Ambientes de Benchmark
 
-Quatro ambientes calibrados para avaliar diferentes capacidades:
+Seis ambientes calibrados para avaliar diferentes capacidades:
 
-| Ambiente | Descrição | Testa | Peso |
-|----------|-----------|-------|------|
-| **NavigationEnv** | Grid world com comida/perigo | Aprendizado espacial, reward seeking | 35% |
-| **PatternMemoryEnv** | Memorização de sequências | Working memory, recall | 25% |
-| **PredictionEnv** | Previsão de séries temporais | Predictive coding, temporal modeling | 25% |
-| **AssociationEnv** | Aprendizado estímulo-resposta | Credit assignment, associação | 15% |
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         BENCHMARK ENVIRONMENTS                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  INTERNOS (environments.rs):                                                │
+│  ├── NavigationEnv       (35%)  Grid world com comida/perigo               │
+│  ├── PatternMemoryEnv    (25%)  Memorização de sequências                  │
+│  ├── PredictionEnv       (25%)  Previsão de séries temporais               │
+│  └── AssociationEnv      (15%)  Aprendizado estímulo-resposta              │
+│                                                                             │
+│  EXTERNOS (simulations/):                                                   │
+│  ├── GridWorldSensorimotor (10%)  Navegação direcional com sensores        │
+│  └── RealtimeNavigation    (10%)  Movimento 8-direcional com comida/perigo │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+| Ambiente | Origem | Descrição | Testa | Peso |
+|----------|--------|-----------|-------|------|
+| **NavigationEnv** | interno | Grid world com comida/perigo | Aprendizado espacial, reward seeking | 35% |
+| **PatternMemoryEnv** | interno | Memorização de sequências | Working memory, recall | 25% |
+| **PredictionEnv** | interno | Previsão de séries temporais | Predictive coding, temporal modeling | 25% |
+| **AssociationEnv** | interno | Aprendizado estímulo-resposta | Credit assignment, associação | 15% |
+| **GridWorldSensorimotor** | simulations/ | Navegação com 4 sensores direcionais | Mapeamento sensor-motor | 10% |
+| **RealtimeNavigation** | simulations/ | Grid complexo com 8 direções | Navegação complexa, evasão | 10% |
+
+### Adicionando Novos Ambientes
+
+Para adicionar uma simulação da pasta `simulations/` ao hyperopt:
+
+1. Crie um adaptador em `external_environments.rs`:
+```rust
+pub struct MinhaSimulacaoEnv { ... }
+
+impl Environment for MinhaSimulacaoEnv {
+    fn reset(&mut self) -> Vec<f64> { ... }
+    fn step(&mut self, action: usize) -> StepResult { ... }
+    fn observation_size(&self) -> usize { ... }
+    fn action_size(&self) -> usize { ... }
+    fn name(&self) -> &str { "MinhaSimulacao" }
+    fn params(&self) -> &EnvironmentParams { ... }
+}
+```
+
+2. Adicione o case em `environments.rs` → `create_with_difficulty()`
+3. Registre em `default_suite()` com peso apropriado
 
 ### Calibração Dinâmica
 
@@ -280,6 +337,127 @@ experiments/results/
 ├── <name>_results.txt       # Resumo final com best config
 └── <name>_checkpoint.json   # Checkpoint para resumir
 ```
+
+## Aplicando Resultados ao AutoConfig
+
+Após executar o hyperopt, use a ferramenta `apply_hyperopt` para transferir os parâmetros otimizados para o sistema AutoConfig:
+
+```bash
+# Usa automaticamente o melhor resultado disponível
+cargo run --release --bin apply_hyperopt
+
+# Ou especifique um arquivo de resultados
+cargo run --release --bin apply_hyperopt experiments/results/mega_full_results.txt
+```
+
+### Como Funciona
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    HYPEROPT → AUTOCONFIG PIPELINE                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. HYPEROPT (Offline)                                                      │
+│     ┌─────────────────┐                                                     │
+│     │   Busca nos 45  │ → experiments/results/<name>_results.txt            │
+│     │   parâmetros    │                                                     │
+│     └─────────────────┘                                                     │
+│              │                                                              │
+│              ▼                                                              │
+│  2. APPLY_HYPEROPT                                                          │
+│     ┌─────────────────┐                                                     │
+│     │  Lê resultados  │ → Parseia valores otimizados                        │
+│     │  Gera código    │ → Funções Rust para derivation.rs                   │
+│     │  Mostra diff    │ → Comparação antes/depois                           │
+│     └─────────────────┘                                                     │
+│              │                                                              │
+│              ▼                                                              │
+│  3. AUTOCONFIG ATUALIZADO                                                   │
+│     ┌─────────────────┐                                                     │
+│     │  derivation.rs  │ → Novos defaults otimizados                         │
+│     │  (você copia)   │                                                     │
+│     └─────────────────┘                                                     │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Exemplo de Output
+
+```
+╔══════════════════════════════════════════════════════════════════╗
+║           HYPEROPT → AUTOCONFIG PARAMETER MAPPING               ║
+╠══════════════════════════════════════════════════════════════════╣
+║                                                                  ║
+║  📊 HOMEOSTASIS                                                  ║
+║    refractory_period: 5 → 2                                      ║
+║    memory_alpha: 0.02 → 0.0457                                   ║
+║    homeo_eta: 0.1627 → 0.2314                                    ║
+║                                                                  ║
+║  📈 STDP                                                         ║
+║    window: 16 → 12                                               ║
+║    tau_plus: 12.8 → 44.65                                        ║
+║    tau_minus: 4.8 → 18.11                                        ║
+║                                                                  ║
+║  💾 MEMORY                                                       ║
+║    weight_decay: 0.0001 → 0.00467                                ║
+║                                                                  ║
+╚══════════════════════════════════════════════════════════════════╝
+
+═══════════════════════════════════════════════════════════════════
+CÓDIGO GERADO (copie para src/autoconfig/derivation.rs)
+═══════════════════════════════════════════════════════════════════
+
+pub fn compute_homeostatic_params(target_firing_rate: f64) -> HomeostaticParams {
+    HomeostaticParams {
+        refractory_period: 2,
+        memory_alpha: 0.0457,
+        homeo_eta: 0.2314,
+        ...
+    }
+}
+```
+
+### Workflow Completo
+
+```bash
+# 1. Execute o hyperopt
+cargo run --release --bin hyperopt -- --strategy bayesian --trials 200
+
+# 2. Aplique os resultados (gera código)
+cargo run --release --bin apply_hyperopt
+
+# 3. Copie o código gerado para derivation.rs
+#    (manualmente, revisando as mudanças)
+
+# 4. Teste a rede com os novos parâmetros
+cargo test
+cargo run --release --bin deep_diagnostic
+```
+
+### Por que não atualiza automaticamente?
+
+A ferramenta **gera código** mas não sobrescreve automaticamente porque:
+
+1. **Revisão humana**: Você pode querer ajustar alguns valores
+2. **Preservar contexto**: O `derivation.rs` pode ter lógica adicional
+3. **Segurança**: Evita regressões acidentais
+4. **Flexibilidade**: Permite combinar resultados de múltiplos experimentos
+
+### Parâmetros Mapeados
+
+A ferramenta mapeia **todos os 45 parâmetros** do hyperopt para as funções correspondentes em `derivation.rs`:
+
+| Função em derivation.rs | Parâmetros do Hyperopt |
+|-------------------------|------------------------|
+| `compute_homeostatic_params` | `homeostasis.*`, `timing.refractory_period` |
+| `compute_stdp_params` | `timing.stdp_*`, `learning.stdp_*`, `learning.ltp_ltd_ratio` |
+| `compute_memory_params` | `memory.*`, `learning.weight_decay` |
+| `compute_energy_params` | `energy.*` |
+| `compute_stp_params` | `timing.stp_*`, `stp.use_fraction` |
+| `compute_competition_params` | `competition.*` |
+| `compute_working_memory_params` | `working_memory.*` |
+| `compute_curiosity_params` | `curiosity.*` |
+| `compute_eligibility_params` | `timing.eligibility_*`, `learning.trace_*` |
 
 ### Exemplo de Execução
 

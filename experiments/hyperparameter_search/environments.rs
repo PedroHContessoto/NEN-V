@@ -1411,6 +1411,34 @@ impl EnvironmentRegistry {
                 };
                 Some(Box::new(AssociationEnv::with_config(config, seed)))
             }
+            // Aliases para compatibilidade
+            "navigation" => self.create_with_difficulty("NavigationEnv", seed, difficulty),
+            "pattern_memory" => self.create_with_difficulty("PatternMemoryEnv", seed, difficulty),
+            "prediction" => self.create_with_difficulty("PredictionEnv", seed, difficulty),
+            "association" => self.create_with_difficulty("AssociationEnv", seed, difficulty),
+            // Ambientes externos (da pasta simulations/)
+            "GridWorldSensorimotor" | "gridworld" => {
+                use super::external_environments::{GridWorldEnv, GridWorldConfig};
+                let config = GridWorldConfig {
+                    grid_size: (3.0 + difficulty * 7.0) as i32,
+                    max_steps: (50.0 + difficulty * 150.0) as usize,
+                    success_threshold: 2.0 + difficulty * 3.0,
+                };
+                Some(Box::new(GridWorldEnv::with_config(config, seed)))
+            }
+            "RealtimeNavigation" | "realtime" => {
+                use super::external_environments::{RealtimeEnv, RealtimeEnvConfig};
+                let config = RealtimeEnvConfig {
+                    grid_width: (8.0 + difficulty * 7.0) as usize,
+                    grid_height: (8.0 + difficulty * 7.0) as usize,
+                    num_food: (2.0 + difficulty * 3.0) as usize,
+                    num_danger: (1.0 + difficulty * 4.0) as usize,
+                    max_steps: (100.0 + difficulty * 200.0) as usize,
+                    success_threshold: 2.0 + difficulty * 4.0,
+                    ..Default::default()
+                };
+                Some(Box::new(RealtimeEnv::with_config(config, seed)))
+            }
             _ => None,
         }
     }
@@ -1446,6 +1474,19 @@ impl EnvironmentRegistry {
             EnvironmentSpec::new("AssociationEnv", 0.15, 25)
                 .with_description("Association learning - tests stimulus-response mapping and credit assignment")
                 .with_difficulty(0.5)
+        );
+
+        // Ambientes externos (da pasta simulations/)
+        registry.register(
+            EnvironmentSpec::new("GridWorldSensorimotor", 0.10, 30)
+                .with_description("GridWorld from simulations/ - directional navigation with sensors")
+                .with_difficulty(0.4)
+        );
+
+        registry.register(
+            EnvironmentSpec::new("RealtimeNavigation", 0.10, 25)
+                .with_description("Realtime environment - 8-directional movement with food/danger")
+                .with_difficulty(0.6)
         );
 
         registry
